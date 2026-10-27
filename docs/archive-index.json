@@ -1,0 +1,212 @@
+[
+  {
+    "path": "archive/disk-scan-and-cache-review/clean2.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/codex_cleanup.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/codex_dates.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/codex_probe.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/codex_sessions.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/codex_verify.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/final_check.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/npm_clean.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/probe2.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/probe3.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/probe4.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/probe5.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/scan_appdata.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/scan_deep.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/scan_deskbox.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/scan_drill.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/scan_drill2.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/scan_programs.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/scan_sizes.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/scan_sys.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/scan_taichi.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/disk-scan-and-cache-review/scan_targets.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/software-catalog/build_report.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/software-catalog/build_shortcuts.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/software-catalog/create_shortcuts.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/software-catalog/export_excel.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/software-catalog/gen_compare_report.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/software-catalog/gen_final_report.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/software-catalog/plan_shortcuts.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/software-catalog/scan_links.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/software-catalog/scan_links_full.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/historical-folder-cleanup/do_delete.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/historical-folder-cleanup/do_delete2.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/historical-uninstall/uninstall_all.ps1.txt",
+    "language": "powershell",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  },
+  {
+    "path": "archive/memory-inspection/smbios_mem.py.txt",
+    "language": "python",
+    "status": "inert historical source; manual adaptation required",
+    "constant_redactions_only": true
+  }
+]

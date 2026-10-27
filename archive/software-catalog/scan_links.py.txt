@@ -1,0 +1,41 @@
+# -*- coding: utf-8 -*-
+"""扫描开始菜单 .lnk 并解析目标路径（用 pylnk3.parse）"""
+import os, json, glob, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+def parse_lnk(path):
+    try:
+        import pylnk3
+        with open(path, 'rb') as f:
+            sc = pylnk3.parse(f)
+        target = getattr(sc, 'path', '') or ''
+        args = getattr(sc, 'arguments', None) or ''
+        return target, args
+    except Exception:
+        return '', ''
+
+results = []
+for base in [os.environ.get('ProgramData', ''), os.environ.get('APPDATA', '')]:
+    if not base:
+        continue
+    start_menu = os.path.join(base, 'Microsoft', 'Windows', 'Start Menu', 'Programs')
+    if not os.path.isdir(start_menu):
+        continue
+    for lnk in glob.glob(os.path.join(start_menu, '**', '*.lnk'), recursive=True):
+        target, args = parse_lnk(lnk)
+        results.append({
+            'Name': os.path.splitext(os.path.basename(lnk))[0],
+            'Target': target,
+            'Args': args,
+            'Folder': os.path.basename(os.path.dirname(lnk)),
+        })
+
+tmp = os.environ.get('TEMP', r'<LOCAL_USER_HOME>\AppData\Local\Temp')
+with open(os.path.join(tmp, 'startmenu_links.json'), 'w', encoding='utf-8') as f:
+    json.dump(results, f, ensure_ascii=False, indent=1)
+print('TOTAL:', len(results))
+ok = sum(1 for r in results if r['Target'])
+print('有目标路径的:', ok)
+for r in results:
+    if r['Target']:
+        print(f"{r['Name']}  ->  {r['Target']}")

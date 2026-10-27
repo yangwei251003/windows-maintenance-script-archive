@@ -1,0 +1,62 @@
+# -*- coding: utf-8 -*-
+"""用 Windows SHFileOperationW API 删除到回收站（支持中文路径）"""
+import os, sys, ctypes
+from ctypes import wintypes
+sys.stdout.reconfigure(encoding='utf-8')
+
+# 定义 SHFILEOPSTRUCT
+class SHFILEOPSTRUCTW(ctypes.Structure):
+    _fields_ = [
+        ('hwnd', wintypes.HWND),
+        ('wFunc', wintypes.UINT),
+        ('pFrom', wintypes.LPCWSTR),
+        ('pTo', wintypes.LPCWSTR),
+        ('fFlags', ctypes.c_uint16),
+        ('fAnyOperationsAborted', wintypes.BOOL),
+        ('hNameMappings', wintypes.LPVOID),
+        ('lpszProgressTitle', wintypes.LPCWSTR),
+    ]
+
+FO_DELETE = 3
+FOF_ALLOWUNDO = 0x40          # 允许撤销 = 进回收站
+FOF_NOCONFIRMATION = 0x10
+FOF_SILENT = 0x4
+FOF_NOERRORUI = 0x400
+
+def delete_to_recyclebin(path):
+    """删除文件/文件夹到回收站"""
+    # pFrom 必须以双 NULL 结尾
+    pFrom = path + '\x00\x00'
+    op = SHFILEOPSTRUCTW()
+    op.hwnd = None
+    op.wFunc = FO_DELETE
+    op.pFrom = pFrom
+    op.pTo = None
+    op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI
+    result = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
+    if result == 0:
+        return True
+    return False
+
+LIB = r'<LOCAL_USER_HOME>\Desktop\我的资料库'
+targets = [
+    os.path.join(LIB, r'03-AI项目开发\01-Web网站\云游地图(六祖云游)', 'liuzu-map-concept-demo.html'),
+    os.path.join(LIB, r'03-AI项目开发\01-Web网站\云游地图(六祖云游)', 'yunyou-map-home-map-first-auth'),
+    os.path.join(LIB, r'03-AI项目开发\01-Web网站\云游地图(六祖云游)', '云游地图-github-package'),
+    os.path.join(LIB, r'03-AI项目开发\01-Web网站\云游地图(六祖云游)', '云游地图-主版本'),
+    os.path.join(LIB, r'03-AI项目开发\01-Web网站\云游地图(六祖云游)', '云游地图_源码交付_20260819.zip'),
+    os.path.join(LIB, r'02-竞赛比赛\挑战杯与创业赛', '挑战杯材料-11版(待确认)'),
+    os.path.join(LIB, r'02-竞赛比赛\挑战杯与创业赛', '挑战杯材料-完整版'),
+    os.path.join(LIB, r'09-归档待确认\待我确认的重复项', '梅州三下乡(桌面旧版651文件-与资料库版本待对比)'),
+]
+
+for t in targets:
+    if os.path.exists(t):
+        if delete_to_recyclebin(t):
+            print(f'[🗑️ 已删除到回收站] {os.path.basename(t)}')
+        else:
+            print(f'[⚠️ 删除失败] {t}')
+    else:
+        print(f'[不存在] {t}')
+
+print('DONE', flush=True)

@@ -1,0 +1,210 @@
+# -*- coding: utf-8 -*-
+"""规划：保留软件 -> 分类 -> 可执行文件匹配"""
+import os, json, re, glob
+
+TMP = os.environ.get('TEMP', r'<LOCAL_USER_HOME>\AppData\Local\Temp')
+with open(os.path.join(TMP, 'installed_software.json'), encoding='utf-8') as f:
+    sw = json.load(f)
+with open(os.path.join(TMP, 'startmenu_links.json'), encoding='utf-8') as f:
+    links = json.load(f)
+
+# ---------- 用户排除清单（归一化为小写核心词，包含匹配） ----------
+EXCLUDE_WORDS = [
+    'creality print', 'autoclaw', 'brainboost', 'cherry studio', 'qclaw', '悟空',
+    'pdf编辑转换器', '搜狗pdf工具', 'free download manager', '迅雷下载组件', '迅雷游戏大厅',
+    'libreoffice', '微软officeplus', 'magicexif', 'ifonts', '字加', '360安全卫士',
+    '360清理pro', '兆懿', 'pakeplus', 'flash大厅', '快猫', '网飞猫', '无人机仿真',
+    'antigravity', 'codebuddy', 'cursor', 'kiro', 'lingma', 'capcut', '惠管家',
+]
+
+def is_excluded(name):
+    n = name.lower()
+    return any(w in n for w in EXCLUDE_WORDS)
+
+# ---------- 分类映射（关键词 -> 文件夹名） ----------
+CAT_MAP = [
+    # AI 工具
+    (['豆包', '千问', '元宝', 'kimi', 'ima.copilot', 'gemini notebook', 'dike ai', 'dumate',
+      'workbuddy', 'fastclient', 'officeaiagent', 'catpawai'], '01-AI工具'),
+    # 编程开发
+    (['visual studio code', 'pycharm', 'intellij', 'android studio', 'trae', 'qoderwork', 'git',
+      'github desktop', 'node.js', 'nvm', 'python', 'java', 'powershell', 'wsl', 'pandoc',
+      '微信开发者工具', 'codex'], '02-编程开发'),
+    # 电子与单片机
+    (['嘉立创', 'proteus', 'stm32cubeide', 'st-link', 'stlink', 'keil', 'arduino', 'secon'], '03-电子与单片机'),
+    # 办公文档
+    (['wps', 'microsoft office', '金山文档', '腾讯文档', 'notion', 'onenote', '有道翻译'], '04-办公文档'),
+    # 即时通讯
+    (['微信', 'qq', '企业微信', '钉钉', '飞书'], '05-即时通讯'),
+    # 浏览器
+    (['chrome', 'firefox', 'microsoft edge', '夸克'], '06-浏览器'),
+    # 网盘下载
+    (['百度网盘', '夸克网盘', 'onedrive', 'neat download', '迅雷'], '07-网盘下载'),
+    # 设计与剪辑
+    (['adobe', '剪映', 'obs studio', 'cc switch', 'open design'], '08-设计与剪辑'),
+    # 影音娱乐
+    (['汽水音乐', 'wallpaper engine', 'steam'], '09-影音娱乐'),
+    # 网络工具
+    (['clash', 'sakurafrp', 'ics'], '11-网络工具'),
+    # 远程控制
+    (['向日葵', 'todesk'], '12-远程控制'),
+]
+
+# 系统工具兜底
+SYS_FOLDER = '10-系统工具'
+
+def classify(name):
+    n = name.lower()
+    for kws, folder in CAT_MAP:
+        for kw in kws:
+            if kw.lower() in n:
+                return folder
+    return SYS_FOLDER
+
+# ---------- 构建快捷方式索引：名称 -> 目标 ----------
+# 排除明显非主程序的快捷方式
+BAD_TARGETS = ['c:\\users\\', '%windir%', '%programfiles', 'uninstall', '卸载', 'unins', 'msiexec',
+               'explorer.exe', 'control.exe', 'cmd.exe', '.chm', '.html', '.url', 'readme',
+               'release notes', 'help', 'manuals', 'documentation', 'manual', '迁移', '配置',
+               'language', '语言首选项', '遥测', 'spreadsheet compare', 'bonjour', 'virtual',
+               'drivers', 'driver', '检查升级', 'checkupdate', 'strong', '强力卸载']
+
+def link_target_for(name):
+    """在开始菜单快捷方式中找匹配的 exe"""
+    n = name.lower()
+    best = None
+    for l in links:
+        ln = l['Name'].lower()
+        t = (l['Target'] or '').lower()
+        if not t or any(b in t for b in BAD_TARGETS):
+            continue
+        # 名称匹配：快捷方式名包含软件名关键词，或软件名包含快捷方式名
+        if n in ln or ln in n:
+            # 取最长的名称匹配（更精确）
+            if best is None or len(ln) > len(best[0]):
+                best = (ln, l['Target'], l['Args'])
+    return best
+
+# ---------- 从安装位置递归找主 exe ----------
+def find_exe_in_dir(d, name):
+    if not d or not os.path.isdir(d):
+        return None
+    # 1) 找与名称相近的 exe
+    n = name.lower()
+    exes = []
+    for root, dirs, files in os.walk(d):
+        # 限制深度，避免太慢
+        depth = root[len(d):].count(os.sep)
+        if depth > 3:
+            dirs[:] = []
+            continue
+        for f in files:
+            if f.lower().endswith('.exe'):
+                exes.append(os.path.join(root, f))
+        if len(exes) > 200:
+            break
+    if not exes:
+        return None
+    # 优先匹配名称词
+    for exe in exes:
+        base = os.path.splitext(os.path.basename(exe))[0].lower()
+        if n and n.split()[0] in base:
+            return exe
+    # 回退：排除 unins/卸载，取第一个
+    for exe in exes:
+        b = os.path.basename(exe).lower()
+        if 'unins' in b or 'uninstall' in b or b.startswith('unins'):
+            continue
+        return exe
+    return None
+
+# ---------- 已知的用户级安装位置兜底 ----------
+KNOWN_PATHS = {
+    'trae': r'<LOCAL_USER_HOME>\AppData\Local\Programs\Trae\Trae.exe',
+    'trae code cn': r'<LOCAL_USER_HOME>\AppData\Local\Programs\Trae CN\Trae.exe',
+    'trae work': r'<LOCAL_USER_HOME>\AppData\Local\Programs\TRAE SOLO\TraeSolo.exe',
+    'visual studio code': r'<LOCAL_USER_HOME>\AppData\Local\Programs\Microsoft VS Code\Code.exe',
+    'github desktop': r'<LOCAL_USER_HOME>\AppData\Local\GitHubDesktop\GitHubDesktop.exe',
+    'cursor': r'<LOCAL_USER_HOME>\AppData\Local\Programs\cursor\Cursor.exe',
+    'cursor (user)': r'<LOCAL_USER_HOME>\AppData\Local\Programs\cursor\Cursor.exe',
+    'codebuddy': r'<LOCAL_USER_HOME>\AppData\Local\Programs\CodeBuddy\CodeBuddy.exe',
+    'kimi': r'<LOCAL_USER_HOME>\AppData\Local\Kimi\Kimi.exe',
+    'ima.copilot': r'<LOCAL_USER_HOME>\AppData\Local\Programs\ima.copilot\ima.exe',
+    'notion': r'<LOCAL_USER_HOME>\AppData\Local\Programs\Notion\Notion.exe',
+    '千问': r'<LOCAL_USER_HOME>\AppData\Local\Programs\QianwenApp\QianwenApp.exe',
+    '豆包': r'<LOCAL_USER_HOME>\AppData\Local\Programs\Doubao\Doubao.exe',
+    '飞书': r'<LOCAL_USER_HOME>\AppData\Local\Programs\Feishu\Feishu.exe',
+    '剪映专业版': r'<LOCAL_USER_HOME>\AppData\Local\JianyingPro\JianyingPro.exe',
+    'capcut': r'<LOCAL_USER_HOME>\AppData\Local\Programs\CapCut\CapCut.exe',
+    '汽水音乐': r'<LOCAL_USER_HOME>\AppData\Local\Programs\Soda Music\SodaMusic.exe',
+    'kimi 2': None,
+}
+
+# ---------- 主流程 ----------
+results = []
+for item in sw:
+    name = item['Name'].strip()
+    loc = item.get('InstallLocation') or ''
+    ver = item.get('Version') or ''
+    if is_excluded(name):
+        continue
+    folder = classify(name)
+    target = None
+    src = ''
+    # 1) 开始菜单快捷方式
+    hit = link_target_for(name)
+    if hit and os.path.isfile(hit[1]):
+        target = hit[1]
+        src = '开始菜单'
+    # 2) 已知路径
+    if not target:
+        for k, p in KNOWN_PATHS.items():
+            if k in name.lower() and p and os.path.isfile(p):
+                target = p
+                src = '已知路径'
+                break
+    # 3) 安装位置递归
+    if not target and loc:
+        found = find_exe_in_dir(loc, name)
+        if found:
+            target = found
+            src = '安装目录'
+    # 4) 常见用户目录
+    if not target:
+        common = [
+            os.path.join(os.environ.get('LOCALAPPDATA', r'<LOCAL_USER_HOME>\AppData\Local'), 'Programs'),
+            r'C:\Program Files', r'C:\Program Files (x86)',
+        ]
+        n0 = re.split(r'[\s(（]+', name)[0]
+        for base in common:
+            pat = os.path.join(base, f'*{n0}*')
+            for d in glob.glob(pat)[:5]:
+                found = find_exe_in_dir(d, name)
+                if found:
+                    target = found
+                    src = '常见目录'
+                    break
+            if target:
+                break
+    results.append({
+        'name': name, 'ver': ver, 'folder': folder,
+        'target': target, 'src': src or '未找到',
+    })
+
+# 输出规划 JSON
+out_plan = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plan.json')
+with open(out_plan, 'w', encoding='utf-8') as f:
+    json.dump(results, f, ensure_ascii=False, indent=1)
+
+# 打印统计
+found = [r for r in results if r['target']]
+missing = [r for r in results if not r['target']]
+print(f'保留软件总数: {len(results)}, 已定位 exe: {len(found)}, 未定位: {len(missing)}')
+print('--- 分类统计 ---')
+from collections import Counter
+c = Counter(r['folder'] for r in results)
+for k, v in sorted(c.items()):
+    print(f'  {k}: {v}')
+print('--- 未定位 exe 的软件 ---')
+for r in missing:
+    print(f"  ❌ {r['name']} (loc: {r.get('src','')})")

@@ -1,0 +1,75 @@
+import os, datetime, collections
+root=r"<LOCAL_USER_HOME>\.codex"
+def fmt(n):
+    for u in ['B','KB','MB','GB','TB']:
+        if n<1024: return f"{n:.1f} {u}"
+        n/=1024
+    return f"{n:.1f} TB"
+def walk_agg(base):
+    # agg by top-level subdir under base (e.g. year), return dict name->(size,count,minmtime,maxmtime)
+    agg={}
+    for name in os.listdir(base):
+        p=os.path.join(base,name)
+        if not os.path.isdir(p): continue
+        sz=0;cnt=0;mn=None;mx=None
+        for r,d,fs in os.walk(p):
+            for f in fs:
+                fp=os.path.join(r,f)
+                try:
+                    st=os.stat(fp); sz+=st.st_size; cnt+=1
+                    m=st.st_mtime
+                    if mn is None or m<mn: mn=m
+                    if mx is None or m>mx: mx=m
+                except: pass
+        agg[name]=(sz,cnt,mn,mx)
+    return agg
+def show(title, base, depth2=False):
+    print(f"\n===== {title}: {base} =====")
+    if not os.path.isdir(base): print("  [不存在]"); return
+    agg=walk_agg(base)
+    rows=sorted(agg.items(), key=lambda x:x[1][0], reverse=True)
+    for name,(sz,cnt,mn,mx) in rows[:40]:
+        a=datetime.datetime.fromtimestamp(mn).strftime("%Y-%m-%d") if mn else "?"
+        b=datetime.datetime.fromtimestamp(mx).strftime("%Y-%m-%d") if mx else "?"
+        print(f"{fmt(sz):>10}  {cnt:>6}files  {a} ~ {b}   {name}")
+
+show("sessions 按一级(年)", r"<LOCAL_USER_HOME>\.codex\sessions")
+show("archived_sessions 按一级", r"<LOCAL_USER_HOME>\.codex\archived_sessions")
+
+# generated_images by date
+gi=r"<LOCAL_USER_HOME>\.codex\generated_images"
+print(f"\n===== generated_images 按日期 =====")
+if os.path.isdir(gi):
+    buckets=collections.Counter(); sizes=collections.Counter()
+    for r,d,fs in os.walk(gi):
+        for f in fs:
+            fp=os.path.join(r,f)
+            try:
+                st=os.stat(fp); dt=datetime.datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d")
+                buckets[dt]+=1; sizes[dt]+=st.st_size
+            except: pass
+    for dt in sorted(buckets):
+        print(f"  {dt}   {fmt(sizes[dt]):>9}  {buckets[dt]} files")
+
+# backups
+print("\n===== 各 backup-* 目录内容(一级)与时间范围 =====")
+for name in os.listdir(root):
+    if name.startswith("backup-"):
+        p=os.path.join(root,name)
+        print(f"\n[{name}]")
+        for n2 in sorted(os.listdir(p)):
+            p2=os.path.join(p,n2)
+            if os.path.isdir(p2):
+                sz=0;cnt=0;mn=None;mx=None
+                for r,d,fs in os.walk(p2):
+                    for f in fs:
+                        try:
+                            st=os.stat(os.path.join(r,f)); sz+=st.st_size;cnt+=1
+                            if mn is None or st.st_mtime<mn: mn=st.st_mtime
+                            if mx is None or st.st_mtime>mx: mx=st.st_mtime
+                        except: pass
+                a=datetime.datetime.fromtimestamp(mn).strftime("%Y-%m-%d") if mn else "?"
+                b=datetime.datetime.fromtimestamp(mx).strftime("%Y-%m-%d") if mx else "?"
+                print(f"   {fmt(sz):>9} {cnt:>5}f  {a}~{b}  {n2}")
+            else:
+                print(f"   file: {n2}")

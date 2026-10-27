@@ -1,0 +1,128 @@
+import ctypes, ctypes.wintypes, struct, json
+
+MEM_TYPE = {0x1A: "DDR4", 0x1B: "LPDDR", 0x1C: "LPDDR2", 0x1D: "LPDDR3",
+            0x1E: "LPDDR4", 0x1F: "Logical non-volatile", 0x20: "HBM",
+            0x21: "HBM2", 0x22: "DDR5", 0x23: "LPDDR5", 0x02: "Unknown"}
+FORM_FACTOR = {0x09: "DIMM", 0x0C: "SODIMM(?), 0x0D=SODIMM", 0x0D: "SODIMM", 0x0E: "SRIMM"}
+FORM_FACTOR_FULL = {0x01: "Other", 0x02: "Unknown", 0x03: "SIMM", 0x04: "SIP", 0x05: "Chip",
+                    0x06: "DIP", 0x07: "ZIP", 0x08: "Proprietary Card", 0x09: "DIMM",
+                    0x0A: "TSOP", 0x0B: "Row of chips", 0x0C: "RIMM", 0x0D: "SODIMM",
+                    0x0E: "SRIMM", 0x0F: "FB-DIMM", 0x10: "Die"}
+
+
+def get_smbios_table():
+    k32 = ctypes.windll.kernel32
+    k32.GetSystemFirmwareTable.argtypes = [ctypes.wintypes.DWORD, ctypes.wintypes.DWORD,
+                                           ctypes.c_void_p, ctypes.wintypes.DWORD]
+    k32.GetSystemFirmwareTable.restype = ctypes.wintypes.DWORD
+    sig = 0x52534D42  # 'RSMB'
+    size = k32.GetSystemFirmwareTable(sig, 0, None, 0)
+    if size == 0:
+        raise RuntimeError("GetSystemFirmwareTable returned 0")
+    buf = ctypes.create_string_buffer(size)
+    k32.GetSystemFirmwareTable(sig, 0, buf, size)
+    raw = buf.raw
+    ver = (raw[1], raw[2])
+    tlen = struct.unpack_from("<I", raw, 4)[0]
+    return ver, raw[8:8 + tlen]
+
+
+def parse_structures(table):
+    structs = []
+    i = 0
+    n = len(table)
+    while i + 4 <= n:
+        stype = table[i]
+        slen = table[i + 1]
+        if slen < 4:
+            break
+        handle = struct.unpack_from("<H", table, i + 2)[0]
+        fmt = table[i:i + slen]
+        # strings
+        j = i + slen
+        strings = []
+        while j < n and table[j] != 0:
+            end = table.find(b"\x00", j)
+            if end < 0:
+                break
+            strings.append(table[j:end].decode("utf-8", "replace"))
+            j = end + 1
+        # skip double null
+        if j < n and table[j] == 0:
+            j += 1
+        structs.append({"type": stype, "len": slen, "handle": handle, "fmt": fmt, "strings": strings})
+        if table[i + slen] == 0 and i + slen + 1 < n and table[i + slen + 1] == 0:
+            i = i + slen + 2
+        else:
+            i = j
+    return structs
+
+
+def s(structs_, idx):
+    if idx == 0 or idx > len(structs_):
+        return None
+    return structs_[idx - 1]
+
+
+def decode_size(fmt):
+    size = struct.unpack_from("<H", fmt, 0x0C)[0]
+    if size == 0:
+        return 0, "empty"
+    if size == 0xFFFF:
+        ext = struct.unpack_from("<I", fmt, 0x1C)[0] & 0x7FFFFFFF
+        return ext, "MB(ext)"
+    if size & 0x8000:
+        return size & 0x7FFF, "KB"
+    return size, "MB"
+
+
+def main():
+    ver, table = get_smbios_table()
+    structs = parse_structures(table)
+    result = {"smbios_version": f"{ver[0]}.{ver[1]}", "arrays": [], "devices": []}
+    for st in structs:
+        fmt, strs = st["fmt"], st["strings"]
+        if st["type"] == 16:
+            maxcap_kb = struct.unpack_from("<I", fmt, 0x07)[0]
+            slots = struct.unpack_from("<H", fmt, 0x0D)[0]
+            ext_max = None
+            if st["len"] >= 0x17:
+                ext_max = struct.unpack_from("<Q", fmt, 0x0F)[0]
+            result["arrays"].append({
+                "max_capacity_GB": round(maxcap_kb / 1024 / 1024, 2) if maxcap_kb not in (0, 0x80000000) else None,
+                "ext_max_capacity_GB": round(ext_max / 1024 / 1024, 2) if ext_max else None,
+                "num_slots": slots,
+                "use": fmt[0x05] if st["len"] > 0x05 else None,
+            })
+        elif st["type"] == 17:
+            size_val, unit = decode_size(fmt)
+            gb = size_val / 1024 if unit.startswith("MB") else size_val / 1024 / 1024
+            mtype = fmt[0x12] if st["len"] > 0x12 else 0
+            speed = struct.unpack_from("<H", fmt, 0x15)[0] if st["len"] > 0x16 else 0
+            conf_speed = struct.unpack_from("<H", fmt, 0x20)[0] if st["len"] > 0x21 else 0
+            dev = {
+                "locator": s(strs, fmt[0x10]) if st["len"] > 0x10 else None,
+                "bank": s(strs, fmt[0x11]) if st["len"] > 0x11 else None,
+                "size_GB": round(gb, 2) if gb else 0,
+                "type": MEM_TYPE.get(mtype, f"0x{mtype:02X}"),
+                "type_raw": mtype,
+                "form_factor": FORM_FACTOR_FULL.get(fmt[0x0E], f"0x{fmt[0x0E]:02X}") if st["len"] > 0x0E else None,
+                "speed_MTs": speed,
+                "configured_speed_MTs": conf_speed,
+                "manufacturer": s(strs, fmt[0x17]) if st["len"] > 0x17 else None,
+                "part_number": s(strs, fmt[0x1A]) if st["len"] > 0x1A else None,
+                "serial": s(strs, fmt[0x18]) if st["len"] > 0x18 else None,
+                "data_width": struct.unpack_from("<H", fmt, 0x0A)[0] if st["len"] > 0x0B else None,
+                "total_width": struct.unpack_from("<H", fmt, 0x08)[0] if st["len"] > 0x09 else None,
+            }
+            result["devices"].append(dev)
+        elif st["type"] == 0:
+            result["bios"] = {
+                "vendor": s(strs, fmt[0x04]) if st["len"] > 0x04 else None,
+                "version": s(strs, fmt[0x05]) if st["len"] > 0x05 else None,
+            }
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()

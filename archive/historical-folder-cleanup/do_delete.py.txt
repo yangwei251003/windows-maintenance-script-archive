@@ -1,0 +1,48 @@
+# -*- coding: utf-8 -*-
+"""删除：云游地图非二次开发版、挑战杯材料、梅州三下乡旧版（走回收站）"""
+import os, sys
+sys.stdout.reconfigure(encoding='utf-8')
+from send2trash import send2trash
+
+LIB = r'<LOCAL_USER_HOME>\Desktop\我的资料库'
+
+# ===== 1. 云游地图：保留 云游地图分支(二次开发版)，删除其余 =====
+yy = os.path.join(LIB, r'03-AI项目开发\01-Web网站\云游地图(六祖云游)')
+keep = '云游地图分支'
+for item in os.listdir(yy):
+    p = os.path.join(yy, item)
+    if item == keep:
+        print(f'[保留] {item}')
+        continue
+    try:
+        send2trash(p)
+        print(f'[🗑️ 已删除到回收站] {item}')
+    except Exception as e:
+        print(f'[失败] {item}: {e}')
+
+# ===== 2. 挑战杯材料（历史范围，不构成当前授权） =====
+tzb = os.path.join(LIB, r'02-竞赛比赛\挑战杯与创业赛')
+for item in os.listdir(tzb):
+    # 挑战杯材料-完整版 / 挑战杯材料-11版(待确认)
+    if '挑战杯材料' in item:
+        p = os.path.join(tzb, item)
+        try:
+            send2trash(p)
+            print(f'[🗑️ 已删除到回收站] {item}')
+        except Exception as e:
+            print(f'[失败] {item}: {e}')
+    else:
+        print(f'[保留-非挑战杯] {item}')
+
+# ===== 3. 梅州三下乡桌面旧版 =====
+wait = os.path.join(LIB, r'09-归档待确认\待我确认的重复项')
+for item in os.listdir(wait):
+    if '梅州三下乡' in item and '旧版' in item:
+        p = os.path.join(wait, item)
+        try:
+            send2trash(p)
+            print(f'[🗑️ 已删除到回收站] {item}')
+        except Exception as e:
+            print(f'[失败] {item}: {e}')
+
+print('DELETE DONE', flush=True)

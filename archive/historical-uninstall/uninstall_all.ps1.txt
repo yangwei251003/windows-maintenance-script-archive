@@ -1,0 +1,57 @@
+$ErrorActionPreference = 'SilentlyContinue'
+$log = '<LOCAL_USER_HOME>\WorkBuddy\2026-08-18-00-15-58\uninstall_log.txt'
+$prog = '<LOCAL_USER_HOME>\WorkBuddy\2026-08-18-00-15-58\uninstall_progress.txt'
+Set-Content -Path $log -Value "=== 批量卸载开始 $(Get-Date) ===" -Encoding UTF8
+
+$targets = @(
+  @{Name='网飞猫';          FilePath='C:\Program Files\ncat.app\Uninstall 网飞猫.exe'; Args='/allusers /S'},
+  @{Name='AutoClaw';       FilePath='C:\Program Files\AutoClaw\Uninstall AutoClaw.exe'; Args='/allusers /S'},
+  @{Name='HP Documentation';FilePath='cmd.exe'; Args='/c "C:\Program Files\HP\Documentation\Doc_Uninstall.cmd"'},
+  @{Name='PakePlus';       FilePath='MsiExec.exe'; Args='/X{44B4B9A4-137B-4C09-B871-D5FEFB2F8252} /qn /norestart'},
+  @{Name='迅雷游戏大厅';     FilePath='C:\Program Files (x86)\360\360Safe\SoftMgr\SoftMgr.exe'; Args='<REMOVED_MACHINE_UNINSTALL_ARGUMENT>'},
+  @{Name='360看图';        FilePath='C:\Program Files (x86)\360AlbumViewer\uninst.exe'; Args='/S'},
+  @{Name='Flash大厅';      FilePath='C:\Program Files (x86)\360\360Safe\SoftMgr\SoftMgr.exe'; Args='<REMOVED_MACHINE_UNINSTALL_ARGUMENT>'},
+  @{Name='惠管家';         FilePath='C:\Program Files (x86)\StarSoftComm\CooCare5\CloudOnline\BIN\Setup.exe'; Args='/uninstall'},
+  @{Name='搜狗PDF工具';     FilePath='C:\Program Files (x86)\360\360Safe\SoftMgr\SoftMgr.exe'; Args='<REMOVED_MACHINE_UNINSTALL_ARGUMENT>'},
+  @{Name='Npcap OEM';     FilePath='C:\Program Files\Npcap\uninstall.exe'; Args='/S'},
+  @{Name='惠无忧';         FilePath='C:\Program Files (x86)\StarSoftComm\StarCenter\Setup\Setup.exe'; Args='/uninstall'},
+  @{Name='悟空';           FilePath='C:\Program Files\Wukong\uninstall.exe'; Args='/S'},
+  @{Name='HP Notifications';FilePath='MsiExec.exe'; Args='/X{19F557DE-662A-4FEA-B635-1CACD56CC483} /qn /norestart'},
+  @{Name='快猫';           FilePath='<LOCAL_USER_HOME>\AppData\Local\Programs\kuaimao\Uninstall 快猫.exe'; Args='/currentuser /S'},
+  @{Name='PDF编辑转换器';   FilePath='<LOCAL_USER_HOME>\AppData\Local\sogoupdf\pdfsdk.exe'; Args='/uninstall /S'}
+)
+
+foreach ($t in $targets) {
+  $line = "--- $($t.Name) ---"
+  Add-Content -Path $log -Value $line
+  if (-not (Test-Path $t.FilePath)) {
+    Add-Content -Path $log -Value "  跳过: 文件不存在 $($t.FilePath)"
+    continue
+  }
+  try {
+    $p = Start-Process -FilePath $t.FilePath -ArgumentList $t.Args -PassThru
+    $exited = $p.WaitForExit(60000)
+    if ($exited) {
+      Add-Content -Path $log -Value "  完成: ExitCode=$($p.ExitCode)"
+    } else {
+      Add-Content -Path $log -Value "  超时: 60s 内未结束(可能卡在界面，未杀进程)"
+    }
+  } catch {
+    Add-Content -Path $log -Value "  异常: $($_.Exception.Message)"
+  }
+  # 进度提示
+  Add-Content -Path $prog -Value $t.Name
+}
+
+# 验证：重新扫描注册表，确认哪些还在
+$paths = @(
+  'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+  'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+  'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+)
+$pattern = 'Flash大厅|迅雷游戏大厅|快猫|网飞猫|360看图|搜狗PDF|PDF编辑转换器|惠管家|惠无忧|PakePlus|Npcap|悟空|AutoClaw|HP Documentation|HP Notifications'
+$still = Get-ItemProperty $paths -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match $pattern } | Select-Object -ExpandProperty DisplayName
+Add-Content -Path $log -Value "" 
+Add-Content -Path $log -Value "=== 验证：仍存在的条目 ==="
+if ($still) { $still | ForEach-Object { Add-Content -Path $log -Value "  仍在: $_" } } else { Add-Content -Path $log -Value "  全部已移除" }
+Add-Content -Path $log -Value "=== 结束 $(Get-Date) ==="

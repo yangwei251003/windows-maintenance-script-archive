@@ -1,0 +1,42 @@
+import os
+def fmt(n):
+    for u in ['B','KB','MB','GB','TB']:
+        if n<1024: return f"{n:.1f} {u}"
+        n/=1024
+    return f"{n:.1f} TB"
+def d(p):
+    t=0
+    for r,ds,fs in os.walk(p):
+        for f in fs:
+            try: t+=os.path.getsize(os.path.join(r,f))
+            except: pass
+    return t
+ap=r"<LOCAL_USER_HOME>\AppData\Local\JianyingPro\Apps"
+print("===== 剪映 Apps 各版本占用 =====")
+tot=0
+for n in sorted(os.listdir(ap)):
+    p=os.path.join(ap,n)
+    if os.path.isdir(p):
+        s=d(p); tot+=s
+        print(f"  {fmt(s):>10}  {n}")
+print(f"  Apps 合计: {fmt(tot)}")
+
+print("\n===== .gemini 各部分汇总 =====")
+g=r"<LOCAL_USER_HOME>\.gemini"
+grand=0
+for n in os.listdir(g):
+    p=os.path.join(g,n)
+    s=d(p) if os.path.isdir(p) else (os.path.getsize(p) if os.path.isfile(p) else 0)
+    grand+=s
+    print(f"  {fmt(s):>10}  {n}")
+print(f"  .gemini 合计: {fmt(grand)}")
+
+# 三个 antigravity 的 browser_recordings 分别占用
+print("\n===== antigravity* 的 browser_recordings 占用 =====")
+for sub in ["antigravity","antigravity-ide","antigravity-backup"]:
+    p=os.path.join(g,sub,"browser_recordings")
+    print(f"  {fmt(d(p)) if os.path.isdir(p) else '-':>10}  {sub}\browser_recordings")
+
+print("\n===== .npm-cache 现状 =====")
+np=r"<LOCAL_USER_HOME>\.npm-cache"
+print("  剩余:", os.listdir(np) if os.path.isdir(np) else "不存在", " 大小:", fmt(d(np)))

@@ -1,0 +1,25 @@
+import os
+def fmt(n):
+    for u in ['B','KB','MB','GB','TB']:
+        if n<1024: return f"{n:.1f} {u}"
+        n/=1024
+    return f"{n:.1f} TB"
+def d(p):
+    t=0
+    for r,ds,fs in os.walk(p):
+        for f in fs:
+            try: t+=os.path.getsize(os.path.join(r,f))
+            except: pass
+    return t
+print("=== .gemini 现状 ===")
+g=r"<LOCAL_USER_HOME>\.gemini"
+for n in sorted(os.listdir(g)):
+    p=os.path.join(g,n)
+    print(f"  {fmt(d(p) if os.path.isdir(p) else os.path.getsize(p)):>10}  {n}")
+print("  .gemini 合计:", fmt(d(g)))
+print("\n=== 剪映 现状 ===")
+j=r"<LOCAL_USER_HOME>\AppData\Local\JianyingPro"
+print("  JianyingPro 合计:", fmt(d(j)))
+print("  Apps 剩余版本:", os.listdir(os.path.join(j,"Apps")) if os.path.isdir(os.path.join(j,"Apps")) else "-")
+print("\n=== .npm-cache 现状 ===")
+print("  ", fmt(d(r"<LOCAL_USER_HOME>\.npm-cache")))

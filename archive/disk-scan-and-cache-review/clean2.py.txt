@@ -1,0 +1,79 @@
+# -*- coding: utf-8 -*-
+import os, shutil, datetime
+
+def fmt(n):
+    for u in ['B','KB','MB','GB','TB']:
+        if n<1024: return f"{n:.1f} {u}"
+        n/=1024
+    return f"{n:.1f} TB"
+def dsize(p):
+    t=0
+    for r,d,fs in os.walk(p):
+        for f in fs:
+            try: t+=os.path.getsize(os.path.join(r,f))
+            except: pass
+    return t
+
+freed=0; log=[]
+def rm(path, guard_root):
+    global freed
+    p=os.path.normcase(os.path.abspath(path)); g=os.path.normcase(os.path.abspath(guard_root))
+    if not p.startswith(g+os.sep):
+        log.append(f"[拒绝]越界 {path}"); return
+    if not os.path.exists(path):
+        log.append(f"[跳过]不存在 {path}"); return
+    s=dsize(path) if os.path.isdir(path) else (os.path.getsize(path) if os.path.isfile(path) else 0)
+    try:
+        if os.path.isdir(path) and not os.path.islink(path):
+            shutil.rmtree(path, ignore_errors=True)
+        else:
+            os.remove(path)
+        freed+=s; log.append(f"[删除] {fmt(s):>9}  {path}")
+    except Exception as e:
+        log.append(f"[失败] {path}: {e}")
+
+# ===== A. .gemini =====
+G=r"<LOCAL_USER_HOME>\.gemini"
+log.append("=== A. .gemini 缓存/旧备份 ===")
+rm(os.path.join(G,"antigravity-backup"), G)
+rm(os.path.join(G,"antigravity-ide"), G)
+rm(os.path.join(G,"antigravity","browser_recordings"), G)
+rm(os.path.join(G,"antigravity-browser-profile"), G)
+
+# ===== B. 剪映 旧版本组件 =====
+J=r"<LOCAL_USER_HOME>\AppData\Local\JianyingPro"
+log.append("=== B. 剪映 旧版本组件 ===")
+for v in ["10.0.0.13832","10.1.0.13849","10.2.0.13877","10.4.0.13957",
+          "10.5.0.13988","10.6.0.14057","11.0.0.14274"]:
+    rm(os.path.join(J,"Apps",v), J)
+
+print("\n".join(log))
+print(f"\n===== 本次释放: {fmt(freed)} =====")
+
+# ===== C. 导出剪映草稿清单 =====
+draft_root=os.path.join(J,"User Data","Projects","com.lveditor.draft")
+out=[]
+out.append("# 剪映草稿项目清单（按大小排序）\n")
+out.append(f"目录: {draft_root}\n")
+if os.path.isdir(draft_root):
+    items=[]
+    for name in os.listdir(draft_root):
+        p=os.path.join(draft_root,name)
+        if os.path.isdir(p):
+            s=dsize(p)
+            try: mt=datetime.datetime.fromtimestamp(os.path.getmtime(p)).strftime("%Y-%m-%d")
+            except: mt="?"
+            items.append((s,name,mt))
+    items.sort(reverse=True)
+    total=sum(x[0] for x in items)
+    out.append(f"共 {len(items)} 个草稿，合计 {fmt(total)}\n\n")
+    out.append("| 大小 | 修改日期 | 草稿名 |\n|---|---|---|\n")
+    for s,name,mt in items:
+        out.append(f"| {fmt(s)} | {mt} | {name} |\n")
+    print(f"\n草稿: {len(items)} 个, 合计 {fmt(total)}")
+else:
+    out.append("（未找到 com.lveditor.draft 目录）\n")
+    print("\n未找到草稿目录")
+with open(r"<LOCAL_USER_HOME>\WorkBuddy\2026-10-02-11-46-32\剪映草稿清单.md","w",encoding="utf-8") as f:
+    f.write("".join(out))
+print("草稿清单已写入 剪映草稿清单.md")

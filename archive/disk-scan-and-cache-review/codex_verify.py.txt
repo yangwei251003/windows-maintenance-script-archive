@@ -1,0 +1,52 @@
+import os, datetime
+root=r"<LOCAL_USER_HOME>\.codex"
+def fmt(n):
+    for u in ['B','KB','MB','GB','TB']:
+        if n<1024: return f"{n:.1f} {u}"
+        n/=1024
+    return f"{n:.1f} TB"
+def dsize(p):
+    t=0
+    for r,d,fs in os.walk(p):
+        for f in fs:
+            try: t+=os.path.getsize(os.path.join(r,f))
+            except: pass
+    return t
+tot=0
+print("===== .codex 顶层现状 =====")
+dirs=[]
+for n in os.listdir(root):
+    p=os.path.join(root,n)
+    if os.path.isdir(p):
+        s=dsize(p); dirs.append((s,n))
+    else:
+        try: s=os.path.getsize(p)
+        except: s=0
+        dirs.append((s,"(file) "+n))
+dirs.sort(reverse=True)
+for s,n in dirs[:22]:
+    print(f"{fmt(s):>10}  {n}")
+print(f"\n.codex 合计: {fmt(dsize(root))}")
+
+print("\n===== 关键保留项是否完好 =====")
+for k in ["config.toml","AGENTS.md","auth.json","hooks.json","thread_history_1.sqlite",
+          "logs_2.sqlite","tools","skills","plugins","sessions",".tmp","memories","plans","attachments"]:
+    p=os.path.join(root,k)
+    print(f"  {'OK ' if os.path.exists(p) else '缺失!'} {k}  ({fmt(dsize(p)) if os.path.isdir(p) else (fmt(os.path.getsize(p)) if os.path.exists(p) else '-')})")
+
+print("\n===== sessions/2026 剩余月份 =====")
+sp=os.path.join(root,"sessions","2026")
+print("  ", sorted(os.listdir(sp)) if os.path.isdir(sp) else "无")
+
+print("\n===== generated_images 剩余日期 =====")
+gi=os.path.join(root,"generated_images")
+import collections
+b=collections.Counter()
+for r,d,fs in os.walk(gi):
+    for f in fs:
+        try: b[datetime.datetime.fromtimestamp(os.stat(os.path.join(r,f)).st_mtime).strftime("%Y-%m-%d")]+=1
+        except: pass
+print("  ", dict(b), " 合计", fmt(dsize(gi)))
+
+print("\n===== backup-* 是否已清空 =====")
+print("  ", [n for n in os.listdir(root) if n.startswith("backup-")] or "已全部删除")

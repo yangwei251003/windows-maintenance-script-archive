@@ -1,0 +1,32 @@
+import os, datetime
+root=r"<LOCAL_USER_HOME>\.codex"
+def fmt(n):
+    for u in ['B','KB','MB','GB','TB']:
+        if n<1024: return f"{n:.1f} {u}"
+        n/=1024
+    return f"{n:.1f} TB"
+def dir_size(path, max_files=2000000):
+    total=0; count=0
+    try:
+        for r,d,fs in os.walk(path):
+            for f in fs:
+                try: total+=os.path.getsize(os.path.join(r,f)); count+=1
+                except: pass
+                if count>=max_files: return total,count,"CAP"
+    except: pass
+    return total,count,""
+print("===== .codex 顶层（含文件与目录）=====")
+items=[]
+for name in os.listdir(root):
+    p=os.path.join(root,name)
+    try: mt=datetime.datetime.fromtimestamp(os.path.getmtime(p)).strftime("%Y-%m-%d %H:%M")
+    except: mt="?"
+    if os.path.isdir(p):
+        s,c,cap=dir_size(p); items.append((s,"DIR ",name,mt,f"{c}files {cap}"))
+    else:
+        try: s=os.path.getsize(p)
+        except: s=0
+        items.append((s,"FILE",name,mt,""))
+items.sort(reverse=True)
+for s,t,name,mt,extra in items:
+    print(f"{fmt(s):>11} {t} {mt}  {name}  {extra}")

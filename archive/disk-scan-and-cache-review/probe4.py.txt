@@ -1,0 +1,41 @@
+import os, datetime
+def fmt(n):
+    for u in ['B','KB','MB','GB','TB']:
+        if n<1024: return f"{n:.1f} {u}"
+        n/=1024
+    return f"{n:.1f} TB"
+def ls(root,label,n=12):
+    print(f"\n===== {label} =====\n{root}")
+    if not os.path.isdir(root): print("  [不存在]"); return
+    for name in sorted(os.listdir(root))[:n]:
+        p=os.path.join(root,name)
+        try: s=os.path.getsize(p) if os.path.isfile(p) else 0
+        except: s=0
+        try: mt=datetime.datetime.fromtimestamp(os.path.getmtime(p)).strftime("%Y-%m-%d")
+        except: mt="?"
+        typ="dir" if os.path.isdir(p) else "file"
+        print(f"  {fmt(s):>8}  {mt}  {typ}  {name}")
+
+# Antigravity browser_recordings 内容抽样
+ls(r"<LOCAL_USER_HOME>\.gemini\antigravity\browser_recordings","antigravity\browser_recordings (抽样)")
+br=r"<LOCAL_USER_HOME>\.gemini\antigravity\browser_recordings"
+if os.path.isdir(br):
+    for r,d,fs in os.walk(br):
+        if fs:
+            print("  示例文件:", [f for f in fs[:6]], " @", r)
+            break
+# 剪映 Apps
+ls(r"<LOCAL_USER_HOME>\AppData\Local\JianyingPro\Apps","剪映 Apps 一级")
+# 剪映 Projects (草稿)
+pj=r"<LOCAL_USER_HOME>\AppData\Local\JianyingPro\User Data\Projects"
+print(f"\n===== 剪映 Projects(草稿) 一级 =====\n{pj}")
+if os.path.isdir(pj):
+    for name in sorted(os.listdir(pj))[:15]:
+        p=os.path.join(pj,name)
+        t=0
+        for r,d,fs in os.walk(p):
+            for f in fs:
+                try: t+=os.path.getsize(os.path.join(r,f))
+                except: pass
+        mt=datetime.datetime.fromtimestamp(os.path.getmtime(p)).strftime("%Y-%m-%d")
+        print(f"  {fmt(t):>10}  {mt}  {'dir' if os.path.isdir(p) else 'file'}  {name}")

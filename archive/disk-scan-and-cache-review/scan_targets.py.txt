@@ -1,0 +1,40 @@
+import os
+def dir_size(path, max_files=500000):
+    total=0; count=0
+    try:
+        for root,dirs,files in os.walk(path):
+            for f in files:
+                try: total+=os.path.getsize(os.path.join(root,f)); count+=1
+                except: pass
+                if count>=max_files: return total,count
+    except: pass
+    return total,count
+def fmt(n):
+    for u in ['B','KB','MB','GB','TB']:
+        if n<1024: return f"{n:.1f} {u}"
+        n/=1024
+    return f"{n:.1f} TB"
+home=r"<LOCAL_USER_HOME>"
+cands=[
+ "DeskBox",".workbuddy","Projects","Desktop","Downloads","Documents",
+ ".claude",".codex",".cursor",".gemini",".trae",".trae-cn",".auggie",
+ ".cherrystudio",".qoder-cli",".qoderwork",".kimi",".kimi-code",".kimi-work",
+ ".doubao","Doubao","DoubaoWork",".marvis",".conda",".mamba",".ollama",
+ ".cache",".npm-cache",".nuget",".gradle",".venv-html-to-docx","Zotero",
+ "OneDrive","WPS Cloud","WPS Cloud Files","WPSDrive","Videos","Pictures",
+ ".local",".config",".android",".dotnet",".stm32cubeide",".stm32cubemx",
+ ".autocad-mcp-2022",".freecad-mcp","python-sdk","ai_completion","brainboost",
+ ".agent-router-adapters",".codebuddy",".codex-session-delete","STM32",
+ "STM32CubeIDE","STMicroelectronics","Tools","Library","Qianwen","WeChatProjects",
+ "cloudbase-deploy","cloudbase-framework",".supabase",".crawl4ai",".sheetagent",
+ "WorkBuddy","WorkBuddy_抢救资料_20260923",".taro4.0",".expo",
+]
+print("===== 主目录候选文件夹大小 =====")
+es=[]
+for c in cands:
+    p=os.path.join(home,c)
+    if os.path.isdir(p):
+        s,cnt=dir_size(p); es.append((s,c,cnt))
+es.sort(reverse=True)
+for s,c,cnt in es:
+    print(f"{fmt(s):>12}  ({cnt} files)  {c}")

@@ -1,0 +1,39 @@
+import os
+def dir_size(path, max_files=800000):
+    total=0; count=0
+    try:
+        for root,dirs,files in os.walk(path):
+            for f in files:
+                try: total+=os.path.getsize(os.path.join(root,f)); count+=1
+                except: pass
+                if count>=max_files: return total,count
+    except: pass
+    return total,count
+def fmt(n):
+    for u in ['B','KB','MB','GB','TB']:
+        if n<1024: return f"{n:.1f} {u}"
+        n/=1024
+    return f"{n:.1f} TB"
+root=r"C:\Program Files\TaiChiWorkSpace"
+print(f"===== {root} 一级 =====")
+for name in os.listdir(root):
+    p=os.path.join(root,name)
+    if os.path.isdir(p):
+        s,c=dir_size(p); print(f"{fmt(s):>12}  ({c} files)  {name}")
+    else:
+        try: s=os.path.getsize(p)
+        except: s=0
+        print(f"{fmt(s):>12}  (1 file)  {name}")
+print("\n--- 二级 (前几个最大子目录) ---")
+for name in os.listdir(root):
+    p=os.path.join(root,name)
+    if os.path.isdir(p):
+        print(f"\n[{name}]")
+        for n2 in os.listdir(p)[:15]:
+            p2=os.path.join(p,n2)
+            if os.path.isdir(p2):
+                s,c=dir_size(p2); print(f"  {fmt(s):>12}  ({c})  {n2}")
+            else:
+                try: s=os.path.getsize(p2)
+                except: s=0
+                print(f"  {fmt(s):>12}  {n2}")

@@ -1,0 +1,586 @@
+# -*- coding: utf-8 -*-
+"""扫描结果整理：分类 + 说明 + 生成 HTML 报告"""
+import json, os, re
+from collections import OrderedDict
+
+TMP = os.environ.get('TEMP', r'<LOCAL_USER_HOME>\AppData\Local\Temp')
+with open(os.path.join(TMP, 'installed_software.json'), encoding='utf-8') as f:
+    sw = json.load(f)
+try:
+    with open(os.path.join(TMP, 'store_apps.json'), encoding='utf-8') as f:
+        store = json.load(f)
+except Exception:
+    store = []
+
+# ---------------- 软件知识库：名称关键词 -> (类别, 说明, 建议) ----------------
+# 建议: keep=建议保留  need=按需使用  clean=可清理  careful=慎删(系统/驱动/运行库)  unknown=待确认
+KB = [
+    # 安全/清理
+    ("火绒", ("安全防护", "轻量杀毒+防火墙，无广告骚扰，国产口碑好", "keep")),
+    ("360安全卫士", ("安全防护", "国产杀毒+系统优化全家桶，功能全但广告弹窗多，与火绒重复", "clean")),
+    ("360清理Pro", ("安全防护", "360 的清理工具，属于捆绑组件，功能与安全卫士重复", "clean")),
+    # 输入法
+    ("微信输入法", ("输入法", "腾讯出品的输入法，主打词库同步和 AI 辅助", "need")),
+    # 通讯
+    ("微信", ("即时通讯", "微信 PC 客户端，日常沟通必备", "keep")),
+    ("企业微信", ("即时通讯", "腾讯企业办公 IM，工作沟通用", "need")),
+    ("QQ", ("即时通讯", "QQ 客户端，聊天+文件传输", "need")),
+    ("钉钉", ("即时通讯", "阿里办公 IM，考勤/群聊/云盘一体", "need")),
+    ("飞书", ("即时通讯", "字节跳动办公 IM，文档/会议/日历一体化", "need")),
+    ("腾讯会议", ("办公协作", "腾讯视频会议软件，网课/组会常用", "keep")),
+    # 浏览器
+    ("Google Chrome", ("浏览器", "谷歌 Chrome 浏览器，插件生态最丰富", "keep")),
+    ("Mozilla Firefox", ("浏览器", "火狐浏览器，隐私保护较好", "need")),
+    ("夸克", ("浏览器", "阿里夸克浏览器，带 AI 搜索、网盘、扫描等聚合功能", "keep")),
+    ("Microsoft Edge", ("浏览器", "Windows 自带浏览器，系统组件", "careful")),
+    # AI 工具
+    ("豆包", ("AI 工具", "字节跳动 AI 助手，支持聊天/写作/图像", "keep")),
+    ("千问", ("AI 工具", "阿里通义千问桌面版，AI 问答/写作助手", "keep")),
+    ("元宝", ("AI 工具", "腾讯元宝 AI 助手，接入腾讯文档/微信生态", "keep")),
+    ("Kimi", ("AI 工具", "月之暗面 Kimi，擅长长文档阅读和推理", "keep")),
+    ("Cherry Studio", ("AI 工具", "聚合型 AI 客户端，可接入多种大模型 API", "keep")),
+    ("ima.copilot", ("AI 工具", "腾讯 ima 知识库+AI 助手，基于微信生态做个人知识管理", "keep")),
+    ("Gemini Notebook", ("AI 工具", "Google 的 AI 笔记应用 NotebookLM", "need")),
+    ("Notion", ("笔记文档", "全能笔记/知识管理软件，支持数据库和 AI", "need")),
+    ("QClaw", ("AI 工具", "腾讯本地 AI 助手，可通过微信远程操控电脑", "keep")),
+    ("AutoClaw", ("AI 工具", "智谱 AI 的本地 Agent 助手（OpenClaw 生态）", "need")),
+    ("CatPawAI", ("AI 工具", "AI 助手类客户端", "need")),
+    ("BrainBoost", ("AI 工具", "AI 学习/记忆辅助工具", "need")),
+    ("DIKE AI", ("AI 工具", "AI 助手类工具", "need")),
+    ("DuMate", ("AI 工具", "AI 助手类工具", "need")),
+    ("悟空", ("AI 工具", "钉钉系 AI 助手（出品方 dingtalk）", "need")),
+    ("OfficeAiAgent", ("AI 工具", "Office AI 助手插件，辅助文档写作", "need")),
+    ("Uninstall海鹦OfficeAI助手", ("AI 工具", "海鹦 OfficeAI 的卸载残留项", "clean")),
+    # AI 编程 IDE
+    ("CodeBuddy", ("编程开发", "腾讯 AI 编程助手/IDE", "keep")),
+    ("Trae", ("编程开发", "字节跳动 AI IDE，国内版 Trae CN / 海外版", "keep")),
+    ("TRAE Work", ("编程开发", "字节 AI 工具（TRAE 系列）", "need")),
+    ("Cursor", ("编程开发", "AI 编程 IDE，代码补全强", "keep")),
+    ("Antigravity", ("编程开发", "AI 编程 IDE（含 Tools 组件）", "need")),
+    ("QoderWork", ("编程开发", "Qoder 出品 AI 编程工具", "need")),
+    ("Codex++", ("编程开发", "AI 编程辅助工具", "need")),
+    ("Kiro", ("编程开发", "AI 浏览器/编程工具（Kiro）", "need")),
+    ("Lingma", ("编程开发", "阿里通义灵码，AI 编程助手插件", "need")),
+    ("OpenAI.Codex", ("编程开发", "OpenAI Codex 编程 Agent", "need")),
+    # 开发工具
+    ("Visual Studio Code", ("编程开发", "微软轻量代码编辑器，插件生态强大", "keep")),
+    ("PyCharm Community Edition", ("编程开发", "JetBrains Python IDE 社区版（免费）", "keep")),
+    ("IntelliJ IDEA", ("编程开发", "JetBrains Java IDE", "need")),
+    ("Android Studio", ("编程开发", "谷歌安卓开发 IDE", "need")),
+    ("GitHub Desktop", ("编程开发", "GitHub 图形化客户端，管理代码仓库", "need")),
+    ("Git", ("编程开发", "代码版本管理工具（Git 命令行）", "keep")),
+    ("Node.js", ("编程开发", "JavaScript 运行时环境，前端开发必备", "keep")),
+    ("NVM for Windows", ("编程开发", "Node.js 多版本管理工具", "need")),
+    ("Python 3.13", ("编程开发", "Python 解释器 3.13 版", "keep")),
+    ("Python 3.12", ("编程开发", "Python 解释器 3.12 版", "keep")),
+    ("Python Launcher", ("编程开发", "Python 启动器，管理多版本调用", "careful")),
+    ("Java", ("编程开发", "Java 开发工具包 JDK 25", "need")),
+    ("PowerShell 7", ("编程开发", "微软新一代命令行/脚本环境", "keep")),
+    ("Windows Subsystem for Linux", ("编程开发", "WSL，Windows 内置 Linux 子系统", "need")),
+    ("Pandoc", ("文档工具", "万能文档格式转换器（md/word/html 互转）", "keep")),
+    ("SQL Server 2014", ("数据库", "微软数据库（含多个组件，2014 老版本）", "need")),
+    ("MySQL Server", ("数据库", "开源关系型数据库（含 Installer/Workbench 等）", "need")),
+    ("MySQL", ("数据库", "MySQL 数据库套件组件", "need")),
+    ("Docker", ("编程开发", "容器化开发工具", "need")),
+    # 电子/单片机/EDA
+    ("嘉立创EDA", ("电子设计", "国产 PCB 电路设计软件（立创 EDA 专业版）", "keep")),
+    ("Proteus", ("电子设计", "电路仿真+单片机仿真软件，课设常用", "keep")),
+    ("STM32CubeIDE", ("单片机开发", "ST 官方 STM32 集成开发环境", "keep")),
+    ("STM32 ST-LINK Utility", ("单片机开发", "STM32 烧录/调试工具", "keep")),
+    ("stlink-server", ("单片机开发", "ST-Link 调试器服务组件", "careful")),
+    ("Keil", ("单片机开发", "Keil 单片机开发环境（μVision，51/ARM 通用）", "keep")),
+    ("Arduino IDE", ("单片机开发", "Arduino 开发环境，入门友好", "need")),
+    ("无人机仿真飞行平台", ("教学仿真", "无人机仿真飞行教学软件（可能是课程用）", "need")),
+    ("希沃白板", ("教学办公", "希沃互动教学白板，课件/授课用", "need")),
+    ("EasiAgent", ("教学办公", "希沃生态后台辅助组件（自动登录等）", "clean")),
+    ("EasiUpdate", ("教学办公", "希沃软件更新组件，可随主程序卸载", "clean")),
+    # 设计/视频/音频
+    ("Adobe After Effects", ("设计剪辑", "AE 视频特效合成软件", "keep")),
+    ("Adobe Photoshop", ("设计剪辑", "PS 图像处理软件", "keep")),
+    ("Adobe Premiere Pro", ("设计剪辑", "PR 视频剪辑软件", "keep")),
+    ("剪映专业版", ("设计剪辑", "抖音官方视频剪辑软件，模板多上手快", "keep")),
+    ("剪映小助手", ("设计剪辑", "剪映的辅助组件", "clean")),
+    ("CapCut", ("设计剪辑", "剪映海外版（如已用剪映可删除）", "clean")),
+    ("OBS Studio", ("录屏直播", "开源录屏/直播推流软件", "need")),
+    ("汽水音乐", ("影音娱乐", "抖音旗下音乐 App", "need")),
+    ("可可影视", ("影音娱乐", "第三方聚合影视播放器（来源不明，版权风险）", "clean")),
+    ("网飞猫", ("影音娱乐", "第三方聚合影视播放器（来源不明，版权风险）", "clean")),
+    ("快猫", ("影音娱乐", "第三方短视频/影视软件（来源不明）", "clean")),
+    ("Wallpaper Engine", ("影音娱乐", "Steam 动态壁纸引擎", "need")),
+    ("Flash大厅", ("影音娱乐", "Flash 播放器聚合大厅（国产捆绑软件）", "clean")),
+    ("Steam", ("游戏平台", "全球最大游戏平台，买游戏/玩游戏用", "keep")),
+    ("迅雷", ("下载工具", "下载工具，支持磁力/种子加速", "need")),
+    ("迅雷下载组件", ("下载工具", "迅雷下载核心组件", "careful")),
+    ("迅雷游戏大厅", ("下载工具", "迅雷旗下游戏分发平台（捆绑类）", "clean")),
+    ("Free Download Manager", ("下载工具", "免费下载管理器，支持多线程/磁力", "need")),
+    ("Neat Download Manager", ("下载工具", "轻量多线程下载工具", "need")),
+    # 网盘
+    ("百度网盘", ("网盘云盘", "百度网盘客户端，存储/分享文件", "keep")),
+    ("夸克网盘", ("网盘云盘", "夸克网盘客户端（与夸克浏览器联动）", "need")),
+    ("OneDrive", ("网盘云盘", "微软云盘（系统组件）", "need")),
+    # 办公
+    ("WPS Office", ("办公软件", "金山办公套件，兼容 Office 格式", "keep")),
+    ("Microsoft Office 专业增强版", ("办公软件", "微软 Office 2019 全家桶（Word/Excel/PPT）", "keep")),
+    ("金山文档", ("办公软件", "金山在线文档客户端", "need")),
+    ("腾讯文档", ("办公软件", "腾讯在线文档客户端", "need")),
+    ("微软OfficePLUS", ("办公软件", "Office 模板/素材插件（可自选卸载）", "clean")),
+    ("LibreOffice", ("办公软件", "开源免费办公套件", "need")),
+    ("搜狗PDF工具", ("PDF 工具", "搜狗 PDF 阅读/转换工具", "need")),
+    ("PDF编辑转换器", ("PDF 工具", "PDF 编辑转换工具", "need")),
+    ("网易有道翻译", ("翻译工具", "网易有道词典/翻译客户端", "need")),
+    # 远程控制
+    ("向日葵远程控制", ("远程控制", "远程桌面控制工具，跨设备操作", "keep")),
+    ("ToDesk", ("远程控制", "远程桌面控制工具，免费流畅", "keep")),
+    # 网络工具
+    ("Clash Verge", ("网络工具", "代理/VPN 客户端（需自行配置）", "need")),
+    ("SakuraFrp", ("网络工具", "内网穿透工具，可把本机服务暴露到公网", "need")),
+    # 系统/驱动
+    ("惠管家", ("预装软件", "惠普笔记本预装的远程服务软件（第三方软通科技，有广告弹窗嫌疑）", "clean")),
+    ("OPPO 互联", ("手机互联", "OPPO 手机与电脑互联工具", "need")),
+    ("凡画数字笔驱动", ("驱动外设", "数位板/数字笔驱动（有对应手写板才需要）", "need")),
+    ("字加字体管理工具", ("字体工具", "字体管理与安装工具", "need")),
+    ("iFonts字体助手", ("字体工具", "字体管理与安装工具", "need")),
+    ("MagicEXIF", ("图像工具", "EXIF 元数据编辑器（查看/修改照片信息）", "need")),
+    ("CC Switch", ("设计剪辑", "Adobe Creative Cloud 版本/账号切换工具", "need")),
+    ("兆懿应用商城", ("安卓模拟", "在 Windows 上运行安卓应用的模拟器", "need")),
+    ("PakePlus", ("开发工具", "把网页打包成桌面应用的开发工具", "need")),
+    ("Open Design", ("设计剪辑", "开源设计工具（Figma 替代）", "need")),
+    ("WorkBuddy", ("AI 工具", "腾讯 WorkBuddy（当前正在使用的助手）", "keep")),
+    ("WinRAR", ("压缩解压", "经典压缩解压软件", "keep")),
+    ("Clash", ("网络工具", "代理客户端", "need")),
+    ("Creality Print", ("3D 打印", "创想三维（Creality）3D 打印机切片软件", "need")),
+    ("Microsoft OneNote", ("办公软件", "微软 OneNote 笔记应用（Office 组件）", "keep")),
+    ("Microsoft GameInput", ("系统组件", "微软游戏输入组件（系统级，勿删）", "careful")),
+    ("Mozilla Maintenance Service", ("浏览器", "Firefox 的自动更新服务组件，随 Firefox 安装", "careful")),
+    ("WPTx64", ("系统组件", "Windows 性能工具包组件（系统级）", "careful")),
+    ("SeCon", ("系统组件", "西门子（Siemens）安全组件（随西门子软件安装）", "careful")),
+    ("ICS", ("网络工具", "网络连接共享相关组件", "careful")),
+    ("Installation Integrity Validator", ("系统组件", "安装完整性校验组件（部分软件安装时自带）", "careful")),
+    ("FastClient", ("网络工具", "网络加速/客户端类工具（来源待确认）", "unknown")),
+]
+
+# 组件组（合并显示）
+GROUPS = [
+    (re.compile(r'^NI\b|^NI-|^NI[A-Z]|^NI [A-Z]|^NI错误|^NI服务|^NI许可|^NI软件', re.I), "NI 仪器套件组件",
+     "美国国家仪器（NI）LabVIEW/Multisim 的底层组件群（约百余项），跟随 NI 软件安装。若不用 LabVIEW/Multisim 可整体卸载", "clean"),
+    (re.compile(r'^Python 3\.\d+\.\d+ (Add|Core|Development|Documentation|Executables|pip|Standard|Tcl|Test|w64)', re.I), "Python 子组件",
+     "Python 安装时拆分的子组件（解释器/文档/库等），随对应 Python 版本一起管理，勿单独删", "careful"),
+    (re.compile(r'^Microsoft (ASP\.NET Core|Windows Desktop Runtime|Visual C\+\+ v14|Visual Basic for Applications 7\.1|Primary Interoperability|ODBC Driver)', re.I), "微软运行库",
+     "程序运行所需的公共运行库（.NET/VC++ 等），很多软件依赖，建议保留", "careful"),
+    (re.compile(r'^Microsoft (Access database engine|Access Runtime|SQL Server|Sql Server|VSS Writer)', re.I), "Office/SQL 组件",
+     "微软 Office Access 或 SQL Server 的组件，通常随主程序安装", "careful"),
+    (re.compile(r'^(SQL Server|Sql Server|Microsoft VSS Writer for SQL Server)'), "SQL Server 组件",
+     "SQL Server 2014 数据库组件群，若不用数据库可整体卸载", "clean"),
+    (re.compile(r'^MySQL'), "MySQL 数据库套件",
+     "MySQL 数据库及配套工具（Installer/Workbench/Server 等）", "need"),
+    (re.compile(r'^Autodesk|^AutoCAD|^ACA & MEP|^Branding64'), "Autodesk 组件",
+     "AutoCAD 2022 全家桶的组件群（语言包/工具），跟随 AutoCAD 安装", "careful"),
+    (re.compile(r'^AMD|^RyzenMasterSDK'), "AMD 显卡/主板驱动组件",
+     "AMD 显卡驱动及附带组件，硬件驱动勿删", "careful"),
+    (re.compile(r'^HP |^HP[A-Z]|^Poly Lens|^Cockpit Tools|^Branding'), "惠普预装组件",
+     "惠普笔记本预装的工具组件（系统信息/文档/通知等），可选择性清理", "clean"),
+    (re.compile(r'^Windows 驱动|^Windows Driver Package'), "单片机调试器驱动",
+     "KEIL/SEGGER/ST 调试器（J-Link、ST-Link 等）的 USB 驱动，搞单片机开发需要", "careful"),
+    (re.compile(r'^Office 16 Click-to-Run'), "Office 组件",
+     "Office 2019 的在线安装组件，跟随 Office", "careful"),
+    (re.compile(r'^Math Kernel Libraries'), "Intel MKL 数学库",
+     "Intel 数学核心函数库组件，开发依赖", "careful"),
+    (re.compile(r'^Intel\(R\) C\+\+'), "Intel C++ 运行库",
+     "Intel 编译器运行库", "careful"),
+    (re.compile(r'^VBA \(|^Visual Basic for Application|^Microsoft Visual Basic for Applications'), "VBA 运行库",
+     "Office 宏(VBA)运行组件，Office 需要", "careful"),
+    (re.compile(r'^UXP WebView|^Adobe'), "Adobe 组件",
+     "Adobe 软件（PS/AE/PR）的公共组件", "careful"),
+    (re.compile(r'^Windows Subsystem for Linux'), "WSL 子系统",
+     "Windows 内置 Linux 子系统（含更新）", "need"),
+    (re.compile(r'^WorkBuddy'), "AI 工具", "腾讯 WorkBuddy（当前正在使用的助手）", "keep"),
+]
+
+# Store 应用说明
+STORE_KB = [
+    ("BaiduNetdisk", "百度网盘", "百度网盘同步组件", "keep"),
+    ("Clipchamp", "视频剪辑", "微软官方视频剪辑工具", "need"),
+    ("DRAWBOARD", "PDF工具", "画板 PDF 阅读/标注工具", "need"),
+    ("HP", "惠普预装", "惠普预装应用（电源/打印/系统信息等）", "clean"),
+    ("RealtekSemiconductorCorp", "声卡驱动", "Realtek 音频控制组件，驱动勿删", "careful"),
+    ("OpenAI.Codex", "编程开发", "OpenAI Codex 编程 Agent", "need"),
+    ("Microsoft.PowerAutomate", "办公自动化", "微软 Power Automate 桌面自动化工具", "need"),
+    ("Microsoft.WindowsCalculator", "系统应用", "Windows 计算器（系统自带）", "careful"),
+    ("Microsoft.WindowsCamera", "系统应用", "Windows 相机（系统自带）", "careful"),
+    ("Microsoft.WindowsPhotos", "系统应用", "Windows 照片查看器（系统自带）", "careful"),
+    ("Microsoft.WindowsNotepad", "系统应用", "Windows 记事本（系统自带）", "careful"),
+    ("Microsoft.WindowsTerminal", "终端工具", "Windows 终端（程序员常用）", "keep"),
+    ("Microsoft.WindowsMaps", "系统应用", "Windows 地图（系统自带）", "careful"),
+    ("Microsoft.WindowsAlarms", "系统应用", "Windows 闹钟（系统自带）", "careful"),
+    ("Microsoft.WindowsSoundRecorder", "系统应用", "Windows 录音机（系统自带）", "careful"),
+    ("Microsoft.ScreenSketch", "系统应用", "Windows 截图工具（系统自带）", "careful"),
+    ("Microsoft.MSPaint", "系统应用", "Windows 画图（系统自带）", "careful"),
+    ("Microsoft.Paint", "系统应用", "Windows 新版画图（系统自带）", "careful"),
+    ("Microsoft.Whiteboard", "系统应用", "Windows 白板（系统自带）", "careful"),
+    ("Microsoft.StickyNotes", "系统应用", "Windows 便笺（系统自带）", "careful"),
+    ("Microsoft.Todos", "系统应用", "微软待办 To-Do（系统自带）", "careful"),
+    ("Microsoft.BingWeather", "系统应用", "天气应用（系统自带）", "careful"),
+    ("Microsoft.YourPhone", "系统应用", "手机连接（Win10/11 自带）", "careful"),
+    ("Microsoft.ZuneMusic", "系统应用", "Windows 媒体播放器（Groove 音乐）", "careful"),
+    ("Microsoft.ZuneVideo", "系统应用", "Windows 视频播放器", "careful"),
+    ("Microsoft.People", "系统应用", "Windows 人脉（系统自带）", "careful"),
+    ("Microsoft.GetHelp", "系统应用", "获取帮助（系统自带）", "careful"),
+    ("Microsoft.OutlookForWindows", "邮件应用", "新版 Outlook 邮件客户端", "need"),
+    ("Microsoft.BingSearch", "搜索组件", "必应搜索组件", "careful"),
+    ("Microsoft.WindowsFeedbackHub", "系统应用", "反馈中心（系统自带）", "careful"),
+    ("Microsoft.DesktopAppInstaller", "系统组件", "winget 包管理器，开发者常用", "careful"),
+    ("Microsoft.MicrosoftOfficeHub", "Office入口", "Office 应用中心入口", "careful"),
+    ("Microsoft.Edge.GameAssist", "Edge组件", "Edge 游戏助手组件", "careful"),
+    ("Microsoft.GamingServices", "系统组件", "Xbox 游戏服务组件", "careful"),
+    ("Microsoft.Xbox", "系统组件", "Xbox 相关组件（游戏录制/覆盖层）", "careful"),
+    ("Microsoft.SecHealthUI", "系统应用", "Windows 安全中心界面", "careful"),
+    ("Microsoft.Winget.Source", "系统组件", "winget 软件源", "careful"),
+    ("Microsoft.VisualStudioCode", "编程开发", "VS Code（商店版）", "keep"),
+    ("Microsoft.PowerShell", "编程开发", "PowerShell（商店版）", "careful"),
+    ("Microsoft.Windows.DevHome", "开发工具", "Windows 开发者主页", "need"),
+    ("WinRAR.ShellExtension", "压缩解压", "WinRAR 右键菜单扩展", "careful"),
+    ("WeixinShare", "即时通讯", "微信分享扩展组件", "careful"),
+    ("QQExtension", "即时通讯", "QQ 扩展组件", "careful"),
+    ("wpsappext", "办公软件", "WPS 扩展组件", "careful"),
+    ("pdfmenuex", "PDF工具", "PDF 右键菜单扩展（搜狗）", "careful"),
+    ("PDFShellExt", "PDF工具", "PDF 右键菜单扩展", "careful"),
+    ("KzipSogouCompress", "压缩解压", "搜狗压缩组件", "careful"),
+    ("HRContextMenu", "系统扩展", "右键菜单扩展组件", "careful"),
+    ("ksystemsharehost", "系统组件", "共享宿主组件", "careful"),
+    ("aimgr", "系统组件", "系统管理组件", "careful"),
+    ("MicrosoftCorporationII.WinAppRuntime", "运行库", "Windows App 运行库", "careful"),
+    ("Microsoft.WinAppRuntime", "运行库", "Windows App 运行库", "careful"),
+    ("Microsoft.WindowsAppRuntime", "运行库", "Windows App 运行库", "careful"),
+    ("MicrosoftCorporationII.QuickAssist", "远程协助", "Windows 快速助手（远程协助）", "careful"),
+    ("MicrosoftCorporationII.WindowsSubsystemForLinux", "开发工具", "WSL 子系统", "need"),
+    ("MicrosoftCorporationII.MicrosoftFamily", "系统应用", "Microsoft Family（家庭安全）", "careful"),
+    ("AdvancedMicroDevicesInc", "显卡驱动", "AMD 显卡驱动组件", "careful"),
+]
+
+def classify(name):
+    for kw, (cat, desc, advice) in KB:
+        if kw.lower() in name.lower():
+            return cat, desc, advice
+    return None
+
+def classify_store(name):
+    for kw, cat, desc, advice in STORE_KB:
+        if kw.lower() in name.lower():
+            return cat, desc, advice
+    return None
+
+# ---------- 处理注册表软件 ----------
+main_items = []   # 独立软件
+grouped = OrderedDict()  # 组件组
+
+for item in sw:
+    name = item['Name'].strip()
+    size = item.get('SizeMB') or 0
+    ver = item.get('Version') or ''
+    pub = item.get('Publisher') or ''
+    # 先尝试组件组合并
+    merged = False
+    for pat, gname, gdesc, gadv in GROUPS:
+        if pat.match(name):
+            key = gname
+            if key not in grouped:
+                grouped[key] = {'desc': gdesc, 'advice': gadv, 'count': 0, 'size': 0, 'items': []}
+            grouped[key]['count'] += 1
+            grouped[key]['size'] += size
+            grouped[key]['items'].append(name)
+            merged = True
+            break
+    if merged:
+        continue
+    r = classify(name)
+    if r:
+        cat, desc, advice = r
+    else:
+        cat, desc, advice = "其他", f"待确认用途（发行商：{pub or '未知'}）", "unknown"
+    main_items.append({'name': name, 'cat': cat, 'desc': desc, 'advice': advice,
+                       'ver': ver, 'pub': pub, 'size': size})
+
+# 过滤掉明显的卸载残留/重复：名称里带 Uninstall 的、纯版本号残留
+filtered = []
+seen = set()
+for it in main_items:
+    nm = it['name']
+    if nm.lower().startswith('uninstall'):
+        grouped.setdefault("卸载残留项", {'desc': '安装器残留的卸载入口，可清理', 'advice': 'clean', 'count': 0, 'size': it['size'], 'items': []})
+        grouped["卸载残留项"]['count'] += 1
+        grouped["卸载残留项"]['items'].append(nm)
+        continue
+    # 去掉名称中重复的版本号尾巴（如 "剪映小助手(客户端) 5.0.1" -> 保持原名）
+    filtered.append(it)
+
+main_items = filtered
+
+# ---------- 处理 Store 应用 ----------
+store_items = []
+for s in store:
+    name = s['Name']
+    ver = s.get('Version') or ''
+    r = classify_store(name)
+    if r:
+        cat, desc, advice = r
+    else:
+        cat, desc, advice = "系统应用", "Windows 商店系统应用/扩展", "careful"
+    store_items.append({'name': name, 'cat': cat, 'desc': desc, 'advice': advice,
+                        'ver': ver, 'pub': '', 'size': 0})
+
+# 过滤明显系统扩展（如纯字母包名、VideoExtension/ImageExtension/编码器）
+def is_extension(n):
+    exts = ['VideoExtension', 'ImageExtension', 'CodecPack', 'WebMedia', 'AV1Video', 'AVCEncoder',
+            'HEIF', 'HEVC', 'MPEG2', 'RawImage', 'VP9', 'Webp', 'LanguageExperiencePack',
+            'WinAppRuntime', 'NarratorScript', 'StartExperiences', 'WidgetsPlatform',
+            'StorePurchaseApp', 'ApplicationCompatibility', 'WebExperience', 'OneNoteVirtualPrinter',
+            'PushNotification', 'ActionsServer', 'GamingOverlay', 'GameOverlay', 'IdentityProvider',
+            'SpeechToText', 'TCUI', 'CrossDevice', 'MicrosoftFamily']
+    return any(e.lower() in n.lower() for e in exts)
+
+extension_items = [s for s in store_items if is_extension(s['name'])]
+store_items = [s for s in store_items if not is_extension(s['name'])]
+
+# ---------- 生成 HTML ----------
+ADVICE_MAP = {
+    'keep':   ('保留',   '#22c55e'),
+    'need':   ('按需',   '#eab308'),
+    'clean':  ('可清理', '#ef4444'),
+    'careful':('勿乱删', '#3b82f6'),
+    'unknown':('待确认', '#a855f7'),
+}
+CAT_COLORS = {
+    'AI 工具': '#8b5cf6', '编程开发': '#06b6d4', '电子设计': '#f59e0b',
+    '单片机开发': '#f97316', '办公软件': '#3b82f6', '即时通讯': '#22c55e',
+    '浏览器': '#38bdf8', '网盘云盘': '#14b8a6', '下载工具': '#0ea5e9',
+    '设计剪辑': '#ec4899', '影音娱乐': '#e879f9', '安全防护': '#ef4444',
+    '远程控制': '#10b981', '教学仿真': '#84cc16', '教学办公': '#a3e635',
+    '数据库': '#6366f1', 'PDF 工具': '#60a5fa', '翻译工具': '#7dd3fc',
+    '网络工具': '#2dd4bf', '压缩解压': '#94a3b8', '字体工具': '#c084fc',
+    '驱动外设': '#fb923c', '预装软件': '#f43f5e', '安卓模拟': '#d946ef',
+    '手机互联': '#34d399', '图像工具': '#f472b6', '笔记文档': '#a78bfa',
+    '办公协作': '#4ade80', '文档工具': '#93c5fd', '录屏直播': '#c4b5fd',
+    '游戏平台': '#fbbf24', '邮件应用': '#67e8f9', '系统应用': '#64748b',
+    '系统组件': '#64748b', '运行库': '#475569', '开发工具': '#22d3ee',
+    '终端工具': '#5eead4', '远程协助': '#2dd4bf', '办公自动化': '#34d399',
+    '搜索组件': '#94a3b8', '声卡驱动': '#fca5a5', '系统扩展': '#64748b',
+    '其他': '#9ca3af',
+}
+
+def esc(s):
+    return str(s).replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('"','&quot;')
+
+def fmt_size(mb):
+    if not mb or mb < 1:
+        return '-'
+    if mb >= 1024:
+        return f'{mb/1024:.1f} GB'
+    return f'{mb:.0f} MB'
+
+def build_rows(items):
+    rows = ''
+    for it in sorted(items, key=lambda x: (x['cat'], x['name'])):
+        c = CAT_COLORS.get(it['cat'], '#9ca3af')
+        ac, acolor = ADVICE_MAP.get(it['advice'], ('?', '#999'))
+        rows += f'''<tr>
+<td><span class="dot" style="background:{c}"></span><span class="appname">{esc(it['name'])}</span><div class="sub">{esc(it['ver'] or '')}</div></td>
+<td><span class="cat" style="color:{c};border-color:{c}">{esc(it['cat'])}</span></td>
+<td class="desc">{esc(it['desc'])}</td>
+<td class="size">{fmt_size(it['size'])}</td>
+<td><span class="adv" style="color:{acolor};background:{acolor}1a;border-color:{acolor}55">{ac}</span></td>
+</tr>'''
+    return rows
+
+def build_group_rows():
+    rows = ''
+    for gname, g in sorted(grouped.items()):
+        ac, acolor = ADVICE_MAP.get(g['advice'], ('?', '#999'))
+        rows += f'''<tr>
+<td><span class="dot" style="background:#64748b"></span><span class="appname">{esc(gname)}</span><div class="sub">{g['count']} 个子项</div></td>
+<td><span class="cat" style="color:#64748b;border-color:#64748b">组件组</span></td>
+<td class="desc">{esc(g['desc'])}</td>
+<td class="size">{fmt_size(g['size'])}</td>
+<td><span class="adv" style="color:{acolor};background:{acolor}1a;border-color:{acolor}55">{ac}</span></td>
+</tr>'''
+    return rows
+
+def build_store_rows():
+    rows = ''
+    for it in sorted(store_items, key=lambda x: (x['cat'], x['name'])):
+        c = CAT_COLORS.get(it['cat'], '#64748b')
+        ac, acolor = ADVICE_MAP.get(it['advice'], ('?', '#999'))
+        rows += f'''<tr>
+<td><span class="dot" style="background:{c}"></span><span class="appname">{esc(it['name'])}</span></td>
+<td><span class="cat" style="color:{c};border-color:{c}">{esc(it['cat'])}</span></td>
+<td class="desc">{esc(it['desc'])}</td>
+<td class="size">-</td>
+<td><span class="adv" style="color:{acolor};background:{acolor}1a;border-color:{acolor}55">{ac}</span></td>
+</tr>'''
+    return rows
+
+total_size = sum(it['size'] for it in main_items) + sum(g['size'] for g in grouped.values())
+n_keep = sum(1 for it in main_items if it['advice']=='keep') + sum(1 for it in store_items if it['advice']=='keep')
+n_clean = sum(1 for it in main_items if it['advice']=='clean') + sum(1 for it in store_items if it['advice']=='clean') + sum(1 for g in grouped.values() if g['advice']=='clean')
+n_unknown = sum(1 for it in main_items if it['advice']=='unknown')
+cats = sorted(set(it['cat'] for it in main_items) | set(it['cat'] for it in store_items))
+
+cat_chips = ''
+for c in cats:
+    col = CAT_COLORS.get(c, '#9ca3af')
+    cat_chips += f'<button class="chip" data-cat="{esc(c)}" style="--c:{col}">{esc(c)}</button>'
+
+html = f'''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>电脑软件清点报告</title>
+<style>
+:root {{ color-scheme: dark; }}
+* {{ margin:0; padding:0; box-sizing:border-box; }}
+body {{ background:#0f1117; color:#e5e7eb; font-family:"Microsoft YaHei","PingFang SC",-apple-system,sans-serif; padding:24px; }}
+.wrap {{ max-width:1200px; margin:0 auto; }}
+h1 {{ font-size:26px; font-weight:700; }}
+.subtitle {{ color:#9ca3af; margin:6px 0 20px; font-size:14px; }}
+.stats {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:22px; }}
+.stat {{ background:#161b26; border:1px solid #232a3b; border-radius:12px; padding:14px 16px; }}
+.stat .num {{ font-size:24px; font-weight:700; color:#fff; }}
+.stat .lbl {{ font-size:12px; color:#9ca3af; margin-top:2px; }}
+.toolbar {{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:16px; }}
+.search {{ flex:1; min-width:220px; background:#161b26; border:1px solid #2a3245; color:#e5e7eb; border-radius:10px; padding:10px 14px; font-size:14px; outline:none; }}
+.search:focus {{ border-color:#6366f1; }}
+.tabs {{ display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; }}
+.tab {{ background:#161b26; border:1px solid #2a3245; color:#cbd5e1; border-radius:999px; padding:6px 14px; font-size:13px; cursor:pointer; }}
+.tab.active {{ background:#6366f1; border-color:#6366f1; color:#fff; }}
+.chips {{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:18px; }}
+.chip {{ background:#161b26; border:1px solid #2a3245; color:#cbd5e1; border-radius:999px; padding:5px 12px; font-size:12px; cursor:pointer; }}
+.chip.active {{ background:var(--c); border-color:var(--c); color:#0f1117; font-weight:600; }}
+.panel {{ display:none; }}
+.panel.active {{ display:block; }}
+table {{ width:100%; border-collapse:collapse; background:#161b26; border-radius:12px; overflow:hidden; }}
+th {{ text-align:left; padding:10px 12px; font-size:12px; color:#9ca3af; background:#1c2233; border-bottom:1px solid #232a3b; position:sticky; top:0; }}
+td {{ padding:10px 12px; border-bottom:1px solid #1e2434; font-size:13px; vertical-align:top; }}
+tr:last-child td {{ border-bottom:none; }}
+tr:hover {{ background:#1a2133; }}
+.appname {{ font-weight:600; color:#f1f5f9; }}
+.sub {{ font-size:11px; color:#64748b; margin-top:2px; }}
+.dot {{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:8px; vertical-align:middle; }}
+.cat {{ font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid; white-space:nowrap; }}
+.desc {{ color:#b6c2d9; max-width:420px; line-height:1.5; }}
+.size {{ color:#94a3b8; white-space:nowrap; }}
+.adv {{ font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid; white-space:nowrap; }}
+.footer {{ color:#64748b; font-size:12px; margin-top:18px; line-height:1.7; }}
+.hint {{ color:#f59e0b; font-size:12px; margin-top:14px; background:#1a2133; border:1px solid #2a3245; border-radius:10px; padding:12px 14px; }}
+.empty {{ padding:30px; text-align:center; color:#64748b; }}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>📦 电脑软件清点报告</h1>
+<div class="subtitle">扫描时间：2026-08-24 ｜ 来源：注册表安装项 + 微软商店应用</div>
+
+<div class="stats">
+<div class="stat"><div class="num">{len(main_items)+len(grouped)+len(store_items)+len(extension_items)}</div><div class="lbl">软件条目总数（含组件）</div></div>
+<div class="stat"><div class="num">{len(main_items)}</div><div class="lbl">独立软件</div></div>
+<div class="stat"><div class="num">{len(grouped)}</div><div class="lbl">组件组（已合并）</div></div>
+<div class="stat"><div class="num">{len(store_items)+len(extension_items)}</div><div class="lbl">商店应用/扩展</div></div>
+<div class="stat"><div class="num" style="color:#ef4444">{n_clean}</div><div class="lbl">建议可清理项</div></div>
+<div class="stat"><div class="num">{total_size/1024:.0f} GB</div><div class="lbl">注册表统计体积（含组件）</div></div>
+</div>
+
+<div class="toolbar">
+<input class="search" id="search" placeholder="🔍 搜索软件名称…">
+</div>
+
+<div class="tabs">
+<button class="tab active" data-tab="main">主要软件 ({len(main_items)})</button>
+<button class="tab" data-tab="group">合并组件组 ({len(grouped)})</button>
+<button class="tab" data-tab="store">商店应用 ({len(store_items)})</button>
+<button class="tab" data-tab="ext">系统扩展/编码器 ({len(extension_items)})</button>
+</div>
+
+<div class="chips" id="chips">
+<button class="chip active" data-cat="__all__" style="--c:#6366f1">全部</button>
+{cat_chips}
+</div>
+
+<div class="panel active" id="panel-main">
+<table><thead><tr><th style="width:30%">软件名称</th><th>类别</th><th>用途说明</th><th>大小</th><th>建议</th></tr></thead>
+<tbody id="tbody-main">{build_rows(main_items)}</tbody></table>
+<div class="empty" id="empty-main" style="display:none">没有匹配的软件</div>
+</div>
+
+<div class="panel" id="panel-group">
+<table><thead><tr><th style="width:30%">组件组</th><th>类别</th><th>用途说明</th><th>大小</th><th>建议</th></tr></thead>
+<tbody id="tbody-group">{build_group_rows()}</tbody></table>
+</div>
+
+<div class="panel" id="panel-store">
+<table><thead><tr><th style="width:30%">软件名称</th><th>类别</th><th>用途说明</th><th>大小</th><th>建议</th></tr></thead>
+<tbody id="tbody-store">{build_store_rows()}</tbody></table>
+</div>
+
+<div class="panel" id="panel-ext">
+<table><thead><tr><th style="width:30%">扩展名称</th><th>类别</th><th>用途说明</th><th>大小</th><th>建议</th></tr></thead>
+<tbody id="tbody-ext">
+{''.join(f'<tr><td><span class="appname">{esc(s["name"])}</span></td><td><span class="cat" style="color:#64748b;border-color:#64748b">系统扩展</span></td><td class="desc">媒体编解码器 / 应用运行组件（系统级，勿删）</td><td class="size">-</td><td><span class="adv" style="color:#3b82f6;background:#3b82f61a;border-color:#3b82f655">勿乱删</span></td></tr>' for s in extension_items)}
+</tbody></table>
+</div>
+
+<div class="hint">⚠️ 说明：扫描结果为只读信息，未做任何修改。「建议」仅基于软件性质和占用判断：<b style="color:#22c55e">保留</b>＝常用/依赖软件；<b style="color:#eab308">按需</b>＝看使用频率自行决定；<b style="color:#ef4444">可清理</b>＝疑似捆绑/冗余/来源不明；<b style="color:#3b82f6">勿乱删</b>＝系统组件或驱动。删除软件请用「设置 → 应用 → 已安装的应用」或官方卸载程序，删除前建议先确认是否还有用。体积数据仅来自注册表记录，部分软件（如商店应用）未记录体积。</div>
+
+<div class="footer">
+生成：AI 助手自动整理 ｜ 共 {len(main_items)} 个独立软件、{len(grouped)} 个组件组、{len(store_items)} 个商店应用、{len(extension_items)} 个系统扩展。
+</div>
+</div>
+
+<script>
+const search = document.getElementById('search');
+const tbodyMap = {{'main':'tbody-main','group':'tbody-group','store':'tbody-store','ext':'tbody-ext'}};
+const emptyMap = {{'main':'empty-main'}};
+let currentTab = 'main';
+let currentCat = '__all__';
+
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {{
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  currentTab = t.dataset.tab;
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + currentTab).classList.add('active');
+  filter();
+}}));
+
+document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => {{
+  document.querySelectorAll('.chip').forEach(x => x.classList.remove('active'));
+  c.classList.add('active');
+  currentCat = c.dataset.cat;
+  filter();
+}}));
+
+function filter() {{
+  const kw = search.value.trim().toLowerCase();
+  const tbody = document.getElementById(tbodyMap[currentTab]);
+  const empty = document.getElementById(emptyMap[currentTab] || '');
+  let shown = 0;
+  tbody.querySelectorAll('tr').forEach(tr => {{
+    const name = tr.querySelector('.appname').textContent.toLowerCase();
+    const cat = tr.querySelector('.cat').textContent;
+    const ok = (!kw || name.includes(kw)) && (currentCat === '__all__' || cat === currentCat);
+    tr.style.display = ok ? '' : 'none';
+    if (ok) shown++;
+  }});
+  if (empty) empty.style.display = shown === 0 ? '' : 'none';
+}}
+
+search.addEventListener('input', filter);
+</script>
+</body>
+</html>'''
+
+out = r'<LOCAL_USER_HOME>\WorkBuddy\2026-08-24-20-55-17\outputs\软件清点报告.html'
+with open(out, 'w', encoding='utf-8') as f:
+    f.write(html)
+
+print(f'OK -> {out}')
+print(f'独立软件: {len(main_items)}, 组件组: {len(grouped)}, 商店: {len(store_items)}, 扩展: {len(extension_items)}')
+print('未知项:', [it['name'] for it in main_items if it['advice']=='unknown'])

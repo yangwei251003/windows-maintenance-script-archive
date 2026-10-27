@@ -1,0 +1,53 @@
+import os, sys
+
+def dir_size(path, max_files=200000):
+    """递归统计目录大小，限制遍历文件数避免过久"""
+    total = 0
+    count = 0
+    try:
+        for root, dirs, files in os.walk(path):
+            for f in files:
+                try:
+                    fp = os.path.join(root, f)
+                    total += os.path.getsize(fp)
+                    count += 1
+                except (OSError, FileNotFoundError):
+                    pass
+                if count >= max_files:
+                    return total, count
+    except (OSError, PermissionError):
+        pass
+    return total, count
+
+def fmt(n):
+    for unit in ['B','KB','MB','GB','TB']:
+        if n < 1024:
+            return f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} TB"
+
+roots = [
+    r"<LOCAL_USER_HOME>",
+    r"C:\Program Files",
+    r"C:\Program Files (x86)",
+    r"C:\ProgramData",
+    r"C:\Autodesk",
+    r"C:\Keil_v5",
+]
+for root in roots:
+    if not os.path.isdir(root):
+        print(f"[跳过] {root} 不存在")
+        continue
+    print(f"\n===== 一级目录大小: {root} =====")
+    entries = []
+    try:
+        for name in os.listdir(root):
+            p = os.path.join(root, name)
+            if os.path.isdir(p):
+                sz, cnt = dir_size(p)
+                entries.append((sz, name, cnt))
+    except (OSError, PermissionError):
+        pass
+    entries.sort(reverse=True)
+    for sz, name, cnt in entries[:40]:
+        print(f"{fmt(sz):>12}  ({cnt} files)  {name}")

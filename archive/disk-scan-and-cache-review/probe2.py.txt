@@ -1,0 +1,44 @@
+import os, datetime, collections
+def fmt(n):
+    for u in ['B','KB','MB','GB','TB']:
+        if n<1024: return f"{n:.1f} {u}"
+        n/=1024
+    return f"{n:.1f} TB"
+def dsize(p):
+    t=0
+    for r,d,fs in os.walk(p):
+        for f in fs:
+            try: t+=os.path.getsize(os.path.join(r,f))
+            except: pass
+    return t
+for root,label in [(r"<LOCAL_USER_HOME>\AppData\Local\JianyingPro","剪映 JianyingPro"),
+                   (r"<LOCAL_USER_HOME>\.gemini",".gemini (Gemini CLI)")]:
+    print(f"\n===== {label}: {root} 一级 =====")
+    es=[]
+    for n in os.listdir(root):
+        p=os.path.join(root,n)
+        try: mt=datetime.datetime.fromtimestamp(os.path.getmtime(p)).strftime("%Y-%m-%d")
+        except: mt="?"
+        if os.path.isdir(p): es.append((dsize(p),n,mt,"dir"))
+        else:
+            try: s=os.path.getsize(p)
+            except: s=0
+            es.append((s,n,mt,"file"))
+    es.sort(reverse=True)
+    for s,n,mt,t in es[:25]:
+        print(f"  {fmt(s):>10}  {mt}  {t}  {n}")
+
+print("\n===== WindowsApps (C:\Program Files\WindowsApps) 一级 TOP =====")
+wa=r"C:\Program Files\WindowsApps"
+try:
+    es=[]
+    for n in os.listdir(wa):
+        p=os.path.join(wa,n)
+        if os.path.isdir(p):
+            es.append((dsize(p),n))
+    es.sort(reverse=True)
+    for s,n in es[:25]:
+        print(f"  {fmt(s):>10}  {n}")
+    print(f"  >>> WindowsApps 条目数: {len(os.listdir(wa))}")
+except Exception as e:
+    print("  读取受限:", e)

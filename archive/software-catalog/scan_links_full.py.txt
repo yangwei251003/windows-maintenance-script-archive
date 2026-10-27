@@ -1,0 +1,22 @@
+# -*- coding: utf-8 -*-
+"""扫描开始菜单 .lnk 完整路径 + 目标，用于复制快捷方式"""
+import os, json, glob
+
+results = []
+for base in [os.environ.get('ProgramData', ''), os.environ.get('APPDATA', '')]:
+    if not base:
+        continue
+    start_menu = os.path.join(base, 'Microsoft', 'Windows', 'Start Menu', 'Programs')
+    if not os.path.isdir(start_menu):
+        continue
+    for lnk in glob.glob(os.path.join(start_menu, '**', '*.lnk'), recursive=True):
+        results.append({
+            'Name': os.path.splitext(os.path.basename(lnk))[0],
+            'FullPath': lnk,
+            'Folder': os.path.basename(os.path.dirname(lnk)),
+        })
+
+tmp = os.environ.get('TEMP', r'<LOCAL_USER_HOME>\AppData\Local\Temp')
+with open(os.path.join(tmp, 'startmenu_full.json'), 'w', encoding='utf-8') as f:
+    json.dump(results, f, ensure_ascii=False, indent=1)
+print('TOTAL:', len(results))

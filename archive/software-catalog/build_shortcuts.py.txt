@@ -1,0 +1,202 @@
+# -*- coding: utf-8 -*-
+"""最终规划：保留的独立软件 -> 分类文件夹 -> exe 路径，并创建快捷方式"""
+import os, sys, json, re, shutil
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import build_report as BR  # 复用 main_items 分类
+
+# ============ 用户不需要的软件（包含匹配） ============
+EXCLUDE = [
+    'creality print', 'autoclaw', 'brainboost', 'cherry studio', 'qclaw', '悟空',
+    'pdf编辑转换器', '搜狗pdf工具', 'free download manager', '迅雷下载组件', '迅雷游戏大厅',
+    'libreoffice', '微软officeplus', 'magicexif', 'ifonts', '字加', '360安全卫士',
+    '360清理pro', '兆懿', 'pakeplus', 'flash大厅', '快猫', '网飞猫',
+    '无人机仿真飞行平台', 'antigravity', 'codebuddy', 'cursor', 'kiro', 'lingma',
+    'capcut', '惠管家',
+]
+def excluded(name):
+    n = name.lower()
+    return any(e in n for e in EXCLUDE)
+
+# ============ exe 路径库（已确认存在的） ============
+EXE = {
+    # 通讯
+    '微信': r'C:\Program Files\Tencent\Weixin\Weixin.exe',
+    'QQ': r'C:\Program Files\Tencent\QQNT\QQ.exe',
+    '企业微信': r'C:\Program Files (x86)\WXWork\WXWork.exe',
+    '钉钉': r'C:\Program Files (x86)\DingDing\DingtalkLauncher.exe',
+    '飞书': r'<LOCAL_USER_HOME>\AppData\Local\Feishu\feishu.exe',
+    '腾讯会议': r'C:\Program Files\Tencent\WeMeet\wemeetapp.exe',
+    # 办公
+    '腾讯文档': r'C:\Program Files\TencentDocs\TencentDocs.exe',
+    '金山文档': r'C:\Program Files (x86)\金山文档\金山文档.exe',
+    'WPS Office': r'<LOCAL_USER_HOME>\AppData\Local\kingsoft\wps office\ksolaunch.exe',
+    'OneNote': r'C:\Program Files\Microsoft Office\root\Office16\ONENOTE.EXE',
+    'Microsoft Office': r'C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE',
+    'Notion': r'<LOCAL_USER_HOME>\AppData\Local\Programs\Notion\Notion.exe',
+    '网易有道翻译': r'<LOCAL_USER_HOME>\AppData\Local\Youdao\Dict\Application\YoudaoDict.exe',
+    '剪映小助手': r'C:\Program Files\jianyin_agent\剪映小助手(客户端).exe',
+    'STM32 ST-LINK Utility': r'C:\Program Files (x86)\STMicroelectronics\STM32 ST-LINK Utility\ST-LINK Utility\STM32 ST-LINK Utility.exe',
+    'Python Launcher': r'C:\Windows\py.exe',
+    'WSL': r'C:\Windows\System32\wsl.exe',
+    '凡画数字笔': r'C:\Program Files (x86)\PenDriver\PenDriver.exe',
+    'Pandoc': None,  # 命令行工具无 GUI，跳过
+    '可可影视': None,  # 来源不明且无快捷方式，跳过
+    # 浏览器
+    'Google Chrome': r'C:\Program Files\Google\Chrome\Application\chrome.exe',
+    'Mozilla Firefox': r'C:\Program Files\Mozilla Firefox\firefox.exe',
+    'Microsoft Edge': r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
+    '夸克': r'C:\Program Files\Quark\quark.exe',
+    # 网盘/下载
+    '百度网盘': r'<LOCAL_USER_HOME>\AppData\Roaming\baidu\BaiduNetdisk\BaiduNetdisk.exe',
+    '夸克网盘': r'<LOCAL_USER_HOME>\AppData\Local\Programs\quark-cloud-drive\QuarkCloudDrive.exe',
+    'OneDrive': r'C:\Program Files\Microsoft OneDrive\OneDrive.exe',
+    '迅雷': r'C:\Program Files (x86)\Thunder Network\Thunder\Program\ThunderStart.exe',
+    'Neat Download Manager': r'C:\Program Files (x86)\Neat Download Manager\NeatDM.exe',
+    # 安全
+    '火绒': r'C:\Program Files\Huorong\Sysdiag\bin\HipsMain.exe',
+    # 压缩
+    'WinRAR': r'C:\Program Files\WinRAR\WinRAR.exe',
+    # 远程
+    '向日葵': r'C:\Program Files\Oray\AweSun\AweSun.exe',
+    'ToDesk': r'C:\Program Files\ToDesk\ToDesk.exe',
+    # 电子/单片机
+    '嘉立创': r'C:\Program Files\lceda-pro\lceda-pro.exe',
+    'Proteus': r'C:\Program Files (x86)\Labcenter Electronics\Proteus 8 Professional\BIN\PDS.EXE',
+    'STM32CubeIDE': r'C:\ST\STM32CubeIDE_1.19.0\STM32CubeIDE\stm32cubeide.exe',
+    'STM32 ST-LINK Utility': r'C:\Program Files (x86)\STMicroelectronics\STM32 ST-LINK Utility\STM32 ST-LINK Utility\STM32 ST-LINK Utility.exe',
+    'Keil': r'C:\Keil_v5\UV4\UV4.exe',
+    'Arduino IDE': r'<LOCAL_USER_HOME>\AppData\Local\Programs\Arduino IDE\Arduino IDE.exe',
+    # 设计/剪辑
+    'Adobe Photoshop': r'C:\Program Files\Adobe\Adobe Photoshop 2024\Photoshop.exe',
+    'Adobe After Effects': r'C:\Program Files\Adobe\Adobe After Effects 2024\Support Files\AfterFX.exe',
+    'Adobe Premiere Pro': r'C:\Program Files\Adobe\Adobe Premiere Pro 2024\Adobe Premiere Pro.exe',
+    '剪映专业版': r'<LOCAL_USER_HOME>\AppData\Local\JianyingPro\Apps\JianyingPro.exe',
+    'OBS Studio': r'C:\Program Files (x86)\Steam\steamapps\common\OBS Studio\bin\64bit\obs64.exe',
+    'CC Switch': r'<LOCAL_USER_HOME>\AppData\Local\Programs\CC Switch\cc-switch.exe',
+    'Open Design': r'<LOCAL_USER_HOME>\AppData\Local\Programs\Open Design\Open Design.exe',
+    # 影音
+    '汽水音乐': r'<LOCAL_USER_HOME>\AppData\Local\Programs\Soda Music\SodaMusicLauncher.exe',
+    'Wallpaper Engine': r'C:\Program Files (x86)\Steam\steamapps\common\wallpaper_engine\wallpaper64.exe',
+    'Steam': r'C:\Program Files (x86)\Steam\Steam.exe',
+    # AI
+    '豆包': r'<LOCAL_USER_HOME>\AppData\Local\Doubao\Application\Doubao.exe',
+    '千问': r'<LOCAL_USER_HOME>\AppData\Local\Programs\QianwenApp\qianwen.exe',
+    '元宝': r'C:\Program Files\Tencent\yuanbao\yuanbao.exe',
+    'Kimi': r'<LOCAL_USER_HOME>\AppData\Local\Programs\kimi-desktop\Kimi.exe',
+    'ima.copilot': r'<LOCAL_USER_HOME>\AppData\Local\ima.copilot\Application\ima.copilot.exe',
+    'Gemini Notebook': r'C:\Program Files\Google\Chrome\Application\chrome_proxy.exe',
+    'WorkBuddy': r'<LOCAL_USER_HOME>\AppData\Local\Programs\WorkBuddy\workbuddy.exe',
+    'CatPawAI': r'<LOCAL_USER_HOME>\AppData\Local\Programs\CatPawAI\catpawai.exe',
+    'DIKE AI': r'<LOCAL_USER_HOME>\AppData\Local\dike\dike.exe',
+    'DuMate': r'C:\Program Files\DuMate\DuMate.exe',
+    'FastClient': r'C:\Program Files\FastClient\FastClient.exe',
+    'OfficeAiAgent': r'C:\Program Files (x86)\HaiYingSoft\OfficeAI\hyofficeaiapp.exe',
+    'Clash Verge': r'<LOCAL_USER_HOME>\Clash Verge\clash-verge.exe',
+    # 开发
+    'Trae': r'<LOCAL_USER_HOME>\AppData\Local\Programs\Trae\Trae.exe',
+    'TraeCode CN': r'<LOCAL_USER_HOME>\AppData\Local\Programs\Trae CN\Trae CN.exe',
+    'TRAE Work': r'<LOCAL_USER_HOME>\AppData\Local\Programs\TRAE SOLO\Trae SOLO.exe',
+    'Visual Studio Code': r'<LOCAL_USER_HOME>\AppData\Local\Programs\Microsoft VS Code\Code.exe',
+    'PyCharm': r'C:\Program Files\JetBrains\PyCharm Community Edition 2024.3.2\bin\pycharm64.exe',
+    'IntelliJ IDEA': r'C:\Program Files\JetBrains\IntelliJ IDEA 2025.2.4\bin\idea64.exe',
+    'Android Studio': r'C:\Program Files\Android\Android Studio\bin\studio64.exe',
+    'GitHub Desktop': r'<LOCAL_USER_HOME>\AppData\Local\GitHubDesktop\GitHubDesktop.exe',
+    'Git': r'C:\Program Files\Git\git-bash.exe',
+    'Node.js': r'C:\Program Files\nodejs\node.exe',
+    'NVM': r'C:\Users\nvm\nvm.exe',
+    'Python 3.12': r'C:\Program Files\Python312\python.exe',
+    'Python 3.13': r'<LOCAL_USER_HOME>\AppData\Local\Programs\Python\Python313\python.exe',
+    'PowerShell 7': r'C:\Program Files\PowerShell\7\pwsh.exe',
+    'MySQL Workbench': r'C:\Program Files\MySQL\MySQL Workbench 8.0\MySQLWorkbench.exe',
+    'MySQL Shell': r'C:\Program Files\MySQL\MySQL Shell 8.0\bin\mysqlsh.exe',
+    'SakuraFrp': r'C:\Program Files\SakuraFrpLauncher\SakuraLauncher.exe',
+    'OPPO 互联': r'C:\Program Files\Oppo Connect\O+Connect.exe',
+    '微信开发者工具': r'C:\Program Files (x86)\Tencent\微信web开发者工具\微信开发者工具.exe',
+    '微信输入法': r'C:\Program Files\Tencent\WeType\2.1.2.13\wetype_update.exe',
+    '希沃白板': r'C:\Program Files (x86)\Seewo\EasiNote5\swenlauncher\swenlauncher.exe',
+    'Codex++': r'<LOCAL_USER_HOME>\AppData\Local\Programs\Codex++\codex-plus-plus.exe',
+    'QoderWork': r'<LOCAL_USER_HOME>\AppData\Local\Programs\QoderWork\qoderwork.exe',
+    '可可影视': None,  # 用户未排除但来源不明，标记待定
+    'WSL': r'C:\Windows\System32\wsl.exe',
+    'Pandoc': r'<LOCAL_USER_HOME>\AppData\Local\Microsoft\WinGet\Packages\JohnMacFarlane.Pandoc_Microsoft.Winget.Source_8wekyb3d8bbwe\pandoc.exe',
+    'SQL Server': None,  # 无GUI，跳过
+    'Java': r'C:\Program Files\Java\jdk-25\bin\java.exe',
+}
+
+# 分类文件夹（从 build_report 的 cat 映射）
+FOLDER_MAP = {
+    'AI 工具': '01-AI工具',
+    '编程开发': '02-编程开发',
+    '开发工具': '02-编程开发',
+    '终端工具': '02-编程开发',
+    '电子设计': '03-电子与单片机',
+    '单片机开发': '03-电子与单片机',
+    '教学仿真': '03-电子与单片机',
+    '办公软件': '04-办公文档',
+    '笔记文档': '04-办公文档',
+    '文档工具': '04-办公文档',
+    'PDF 工具': '04-办公文档',
+    '翻译工具': '04-办公文档',
+    '邮件应用': '04-办公文档',
+    '即时通讯': '05-即时通讯',
+    '办公协作': '05-即时通讯',
+    '浏览器': '06-浏览器',
+    '网盘云盘': '07-网盘下载',
+    '下载工具': '07-网盘下载',
+    '设计剪辑': '08-设计与剪辑',
+    '录屏直播': '08-设计与剪辑',
+    '图像工具': '08-设计与剪辑',
+    '影音娱乐': '09-影音娱乐',
+    '游戏平台': '09-影音娱乐',
+    '安全防护': '10-系统工具',
+    '压缩解压': '10-系统工具',
+    '字体工具': '10-系统工具',
+    '驱动外设': '10-系统工具',
+    '手机互联': '10-系统工具',
+    '教学办公': '10-系统工具',
+    '安卓模拟': '10-系统工具',
+    '网络工具': '11-网络工具',
+    '远程控制': '12-远程控制',
+    '远程协助': '12-远程控制',
+}
+
+DESKTOP = os.path.join(os.path.expanduser('~'), 'Desktop')
+ROOT = os.path.join(DESKTOP, '我的软件')
+
+def find_exe(name, cat):
+    """按名称找 exe：优先精确，再模糊"""
+    n = name.lower()
+    for k, p in EXE.items():
+        if k.lower() in n and p and os.path.isfile(p):
+            return p
+    return None
+
+# 构建计划
+plan = []
+skipped = []
+for it in BR.main_items:
+    name = it['name']
+    if excluded(name):
+        continue
+    # 特别处理：可可影视等未排除但无路径
+    exe = find_exe(name, it['cat'])
+    folder = FOLDER_MAP.get(it['cat'], '10-系统工具')
+    if exe:
+        plan.append({'name': name, 'cat': it['cat'], 'folder': folder, 'exe': exe})
+    else:
+        skipped.append({'name': name, 'cat': it['cat'], 'folder': folder, 'reason': '未找到可执行文件'})
+
+print(f'将创建快捷方式: {len(plan)} 个')
+print(f'跳过(未找到exe): {len(skipped)} 个')
+for s in skipped:
+    print(f'  ⚠ {s["name"]} [{s["cat"]}] - {s["reason"]}')
+print('--- 分类统计 ---')
+from collections import Counter
+c = Counter(p['folder'] for p in plan)
+for k, v in sorted(c.items()):
+    print(f'  {k}: {v}')
+
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plan.json'), 'w', encoding='utf-8') as f:
+    json.dump(plan, f, ensure_ascii=False, indent=1)
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'skipped.json'), 'w', encoding='utf-8') as f:
+    json.dump(skipped, f, ensure_ascii=False, indent=1)

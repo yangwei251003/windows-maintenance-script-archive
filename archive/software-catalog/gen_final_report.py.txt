@@ -1,0 +1,85 @@
+# -*- coding: utf-8 -*-
+"""生成最终归类清单（HTML 报告）"""
+import os, glob, json, html as html_mod
+
+root = r'<LOCAL_USER_HOME>\Desktop\我的软件'
+folders = {}
+for lnk in sorted(glob.glob(os.path.join(root, '**', '*.lnk'), recursive=True)):
+    folder = os.path.basename(os.path.dirname(lnk))
+    name = os.path.splitext(os.path.basename(lnk))[0]
+    folders.setdefault(folder, []).append(name)
+
+# 生成 HTML 清单
+CAT_ORDER = sorted(folders.keys())
+total = sum(len(v) for v in folders.values())
+
+cards = ''
+for cat in CAT_ORDER:
+    items = folders[cat]
+    lis = ''.join(f'<li>{html_mod.escape(n)}</li>' for n in sorted(items))
+    cards += f'''
+    <div class="card">
+      <div class="card-head">
+        <span class="cat-name">{html_mod.escape(cat)}</span>
+        <span class="count">{len(items)} 个</span>
+      </div>
+      <ul>{lis}</ul>
+    </div>'''
+
+html = f'''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>我的软件 - 归类清单</title>
+<style>
+:root {{ color-scheme: dark; }}
+* {{ margin:0; padding:0; box-sizing:border-box; }}
+body {{ background:#0f1117; color:#e5e7eb; font-family:"Microsoft YaHei",-apple-system,sans-serif; padding:28px; }}
+.wrap {{ max-width:1100px; margin:0 auto; }}
+h1 {{ font-size:24px; margin-bottom:6px; }}
+.sub {{ color:#9ca3af; font-size:13px; margin-bottom:20px; }}
+.stats {{ display:flex; gap:20px; margin-bottom:24px; flex-wrap:wrap; }}
+.stat {{ background:#161b26; border:1px solid #232a3b; border-radius:12px; padding:12px 20px; }}
+.stat .n {{ font-size:22px; font-weight:700; color:#fff; }}
+.stat .l {{ font-size:12px; color:#9ca3af; }}
+.grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; }}
+.card {{ background:#161b26; border:1px solid #232a3b; border-radius:12px; padding:14px 16px; }}
+.card-head {{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:1px solid #232a3b; padding-bottom:8px; }}
+.cat-name {{ font-weight:700; color:#fff; font-size:14px; }}
+.count {{ font-size:12px; color:#8b5cf6; background:#8b5cf61a; padding:2px 8px; border-radius:999px; }}
+ul {{ list-style:none; }}
+li {{ font-size:13px; color:#b6c2d9; padding:4px 0; border-bottom:1px dashed #1e2434; }}
+li:last-child {{ border-bottom:none; }}
+.footer {{ margin-top:24px; color:#64748b; font-size:12px; line-height:1.8; }}
+.hint {{ background:#1a2133; border:1px solid #2a3245; border-radius:10px; padding:12px 14px; margin-top:16px; font-size:12px; color:#f59e0b; line-height:1.7; }}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>📁 我的软件 · 归类清单</h1>
+<div class="sub">桌面文件夹「我的软件」内共 {total} 个快捷方式，按类别分为 {len(CAT_ORDER)} 个文件夹</div>
+
+<div class="stats">
+<div class="stat"><div class="n">{total}</div><div class="l">快捷方式总数</div></div>
+<div class="stat"><div class="n">{len(CAT_ORDER)}</div><div class="l">分类文件夹</div></div>
+</div>
+
+<div class="grid">{cards}</div>
+
+<div class="hint">📌 说明：
+① 所有快捷方式均指向你电脑上确认存在的程序文件，双击即可打开；
+② 此清单为只读整理，未删除或移动任何原软件；
+③ 桌面还有一个「我的软件_旧版备份」文件夹（之前生成的旧版快捷方式），确认新文件夹没问题后可手动删除；
+④ 未创建快捷方式的软件：可可影视（exe未找到）、网易有道翻译（exe未找到，可能已卸载）、EasiAgent/EasiUpdate（希沃后台组件）、Pandoc（命令行工具）、系统级组件等，详见上一份清点报告。</div>
+
+<div class="footer">生成时间：2026-08-24 ｜ 由 AI 自动整理</div>
+</div>
+</body>
+</html>'''
+
+out = r'<LOCAL_USER_HOME>\WorkBuddy\2026-08-24-20-55-17\outputs\软件归类清单.html'
+with open(out, 'w', encoding='utf-8') as f:
+    f.write(html)
+print('OK ->', out)
+print('总快捷方式:', total, '| 文件夹数:', len(CAT_ORDER))

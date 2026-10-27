@@ -1,0 +1,126 @@
+# -*- coding: utf-8 -*-
+"""生成软件对比总结报告（HTML）"""
+import json, os, html
+
+TMP = r'<LOCAL_USER_HOME>\AppData\Local\Temp'
+with open(os.path.join(TMP, 'installed_software.json'), encoding='utf-8') as f:
+    old = json.load(f)
+with open(os.path.join(TMP, 'current_software.json'), encoding='utf-8') as f:
+    cur = json.load(f)
+
+old_map = {it['Name'].strip().lower(): it for it in old}
+cur_map = {it['Name'].strip().lower(): it for it in cur}
+
+gone_names = sorted(set(old_map) - set(cur_map))
+
+# 分类消失的软件（按原始报告的类别）
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import build_report as BR
+
+def get_cat(name):
+    for kw, (cat, desc, advice) in BR.KB:
+        if kw.lower() in name.lower():
+            return cat
+    return '其他'
+
+# 分组
+categories = {}
+for n in gone_names:
+    # 找到原始名称
+    orig = old_map[n]['Name']
+    cat = get_cat(orig)
+    categories.setdefault(cat, []).append(orig)
+
+CAT_COLORS = {
+    '安全防护': '#ef4444', 'AI 工具': '#8b5cf6', '编程开发': '#06b6d4',
+    '影音娱乐': '#e879f9', '下载工具': '#0ea5e9', '办公软件': '#3b82f6',
+    '设计剪辑': '#ec4899', '字体工具': '#c084fc', '图像工具': '#f472b6',
+    '教学仿真': '#84cc16', '预装软件': '#f43f5e', '安卓模拟': '#d946ef',
+    'PDF 工具': '#60a5fa', '翻译工具': '#7dd3fc', '其他': '#9ca3af',
+}
+
+def esc(s):
+    return html.escape(str(s))
+
+cards = ''
+for cat, items in sorted(categories.items()):
+    c = CAT_COLORS.get(cat, '#9ca3af')
+    lis = ''.join(f'<li>{esc(i)}</li>' for i in sorted(items))
+    cards += f'''
+    <div class="card">
+      <div class="card-head">
+        <span class="cat-name" style="color:{c}">{esc(cat)}</span>
+        <span class="count">{len(items)} 个</span>
+      </div>
+      <ul>{lis}</ul>
+    </div>'''
+
+total_old = len(old)
+total_cur = len(cur)
+deleted = len(gone_names)
+
+html_doc = f'''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>软件对比总结报告</title>
+<style>
+:root {{ color-scheme: dark; }}
+* {{ margin:0; padding:0; box-sizing:border-box; }}
+body {{ background:#0f1117; color:#e5e7eb; font-family:"Microsoft YaHei",-apple-system,sans-serif; padding:28px; }}
+.wrap {{ max-width:1100px; margin:0 auto; }}
+h1 {{ font-size:24px; margin-bottom:6px; }}
+.sub {{ color:#9ca3af; font-size:13px; margin-bottom:24px; }}
+.stats {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:24px; }}
+.stat {{ background:#161b26; border:1px solid #232a3b; border-radius:12px; padding:14px 16px; }}
+.stat .n {{ font-size:24px; font-weight:700; }}
+.stat .l {{ font-size:12px; color:#9ca3af; margin-top:2px; }}
+.blue {{ color:#3b82f6; }} .green {{ color:#22c55e; }} .red {{ color:#ef4444; }}
+.grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; }}
+.card {{ background:#161b26; border:1px solid #232a3b; border-radius:12px; padding:14px 16px; }}
+.card-head {{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:1px solid #232a3b; padding-bottom:8px; }}
+.cat-name {{ font-weight:700; font-size:14px; }}
+.count {{ font-size:12px; color:#ef4444; background:#ef44441a; padding:2px 8px; border-radius:999px; }}
+ul {{ list-style:none; }}
+li {{ font-size:13px; color:#b6c2d9; padding:4px 0; border-bottom:1px dashed #1e2434; }}
+li:last-child {{ border-bottom:none; }}
+.note {{ background:#1a2133; border:1px solid #2a3245; border-radius:10px; padding:14px 16px; margin-top:20px; font-size:13px; color:#cbd5e1; line-height:1.8; }}
+.footer {{ margin-top:20px; color:#64748b; font-size:12px; }}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>🔄 软件对比总结报告</h1>
+<div class="sub">对比时间：2026-08-25 ｜ 初次扫描：2026-08-24 ｜ 期间执行了「软件卸载 + 桌面整理」</div>
+
+<div class="stats">
+<div class="stat"><div class="n blue">{total_old}</div><div class="l">最初软件条目</div></div>
+<div class="stat"><div class="n green">{total_cur}</div><div class="l">当前软件条目</div></div>
+<div class="stat"><div class="n red">{deleted}</div><div class="l">已删除软件</div></div>
+<div class="stat"><div class="n">0</div><div class="l">新增软件</div></div>
+</div>
+
+<div class="grid">{cards}</div>
+
+<div class="note">
+📌 <b>说明：</b>
+<br>① 以上 {deleted} 个软件均为你确认「不需要」后删除的（含通过官方卸载程序卸载 + 清理残留注册表项）；
+<br>② 数量对比基于注册表「卸载程序」列表（367 → 333），另有 <b>NI 仪器套件组件（123个）、惠普预装组件（8个）</b> 仍保留未动，如需清理可再操作；
+<br>③ 桌面已整理为「我的软件」文件夹（12 个分类、77 个快捷方式），桌面散落快捷方式已清理；
+<br>④ 唯一待确认项：<b>360安全卫士</b> 卸载程序已启动，需在弹窗中手动确认完成卸载。
+</div>
+
+<div class="footer">生成时间：2026-08-25 ｜ 由 AI 自动对比生成</div>
+</div>
+</body>
+</html>'''
+
+out = r'<LOCAL_USER_HOME>\WorkBuddy\2026-08-24-20-55-17\outputs\软件对比总结报告.html'
+with open(out, 'w', encoding='utf-8') as f:
+    f.write(html_doc)
+print('OK ->', out)
+print(f'消失软件: {deleted} 个，分布在 {len(categories)} 个类别')
+for k, v in sorted(categories.items()):
+    print(f'  {k}: {len(v)}')

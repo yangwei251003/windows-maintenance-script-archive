@@ -1,0 +1,38 @@
+import os
+def dir_size(path, max_files=600000):
+    total=0; count=0
+    try:
+        for root,dirs,files in os.walk(path):
+            for f in files:
+                try: total+=os.path.getsize(os.path.join(root,f)); count+=1
+                except: pass
+                if count>=max_files: return total,count
+    except: pass
+    return total,count
+def fmt(n):
+    for u in ['B','KB','MB','GB','TB']:
+        if n<1024: return f"{n:.1f} {u}"
+        n/=1024
+    return f"{n:.1f} TB"
+for root in [r"<LOCAL_USER_HOME>\CrossDevice",
+             r"<LOCAL_USER_HOME>\.antigravity_cockpit",
+             r"<LOCAL_USER_HOME>\.antigravity",
+             r"<LOCAL_USER_HOME>\.iflow",
+             r"<LOCAL_USER_HOME>\Videos",
+             r"<LOCAL_USER_HOME>\.vscode",
+             r"<LOCAL_USER_HOME>\Downloads"]:
+    print(f"\n===== {root} 一级 =====")
+    if not os.path.isdir(root):
+        print("  [不存在]"); continue
+    es=[]
+    for name in os.listdir(root):
+        p=os.path.join(root,name)
+        if os.path.isdir(p):
+            s,c=dir_size(p); es.append((s,name,c))
+        else:
+            try: s=os.path.getsize(p)
+            except: s=0
+            es.append((s,name,1))
+    es.sort(reverse=True)
+    for s,name,c in es[:20]:
+        print(f"{fmt(s):>12}  ({c} files)  {name}")

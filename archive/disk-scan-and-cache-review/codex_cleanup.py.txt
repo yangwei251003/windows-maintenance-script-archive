@@ -1,0 +1,119 @@
+# -*- coding: utf-8 -*-
+"""仅在用户确认的清单内删除 .codex 内容。带白名单保护。"""
+import os, glob, shutil, sys, datetime
+
+ROOT = r"<LOCAL_USER_HOME>\.codex"
+ROOT_N = os.path.normcase(os.path.abspath(ROOT))
+
+freed = 0
+log = []
+
+def size_of(path):
+    if os.path.isfile(path):
+        try: return os.path.getsize(path)
+        except: return 0
+    t = 0
+    for r, d, fs in os.walk(path):
+        for f in fs:
+            try: t += os.path.getsize(os.path.join(r, f))
+            except: pass
+    return t
+
+def safe(path):
+    """必须位于 .codex 之下，且不是 ROOT 本身"""
+    p = os.path.normcase(os.path.abspath(path))
+    return p.startswith(ROOT_N + os.sep) and p != ROOT_N
+
+def rm(path):
+    global freed
+    if not safe(path):
+        log.append(f"[拒绝] 越界路径: {path}"); return
+    if not os.path.exists(path):
+        log.append(f"[跳过] 不存在: {path}"); return
+    s = size_of(path)
+    try:
+        if os.path.isdir(path) and not os.path.islink(path):
+            shutil.rmtree(path, ignore_errors=True)
+        else:
+            os.remove(path)
+        freed += s
+        log.append(f"[删除] {fmt(s):>10}  {path}")
+    except Exception as e:
+        log.append(f"[失败] {path} : {e}")
+
+def fmt(n):
+    for u in ['B','KB','MB','GB','TB']:
+        if n < 1024: return f"{n:.1f} {u}"
+        n /= 1024
+    return f"{n:.1f} TB"
+
+# ---------- A. sessions 旧月份 (8/2之前) ----------
+log.append("=== A. sessions 旧月份 ===")
+for m in ["03","04","05","06","07"]:
+    rm(os.path.join(ROOT, "sessions", "2026", m))
+
+# ---------- B. generated_images 除 2026-09-27 外 ----------
+log.append("=== B. generated_images (仅保留 2026-09-27) ===")
+gi = os.path.join(ROOT, "generated_images")
+if os.path.isdir(gi):
+    keep = "2026-09-27"
+    for r, ds, fs in os.walk(gi, topdown=False):
+        for f in fs:
+            fp = os.path.join(r, f)
+            try:
+                dt = datetime.datetime.fromtimestamp(os.stat(fp).st_mtime).strftime("%Y-%m-%d")
+            except: dt = ""
+            if dt != keep:
+                rm(fp)
+        # 清理空目录
+        for d in ds:
+            dp = os.path.join(r, d)
+            try:
+                if os.path.isdir(dp) and not os.listdir(dp):
+                    os.rmdir(dp)
+            except: pass
+
+# ---------- C. 5 个 backup-* 目录 ----------
+log.append("=== C. backup-* ===")
+for name in ["backup-20260711-165915-instance-thread-sync",
+             "backup-20260722-111322-instance-thread-sync",
+             "backup-20260722-112336-instance-thread-sync",
+             "backup-20260722-114623-instance-thread-sync",
+             "backup-20260809-130027-session-visibility-repair"]:
+    rm(os.path.join(ROOT, name))
+
+# ---------- D. 顶层残留临时/旧备份文件 ----------
+log.append("=== D. 残留临时/旧备份文件 ===")
+tmp_files = glob.glob(os.path.join(ROOT, "..codex-global-state.json.tmp-*"))
+for f in tmp_files:
+    rm(f)
+for extra in ["..codex-global-state.json.bak-remote-autoconnect-fix-20260906",
+              "..codex-global-state.json.bak.bak",
+              ".cockpit_codex_auth.json.bak",
+              "cockpit-local-access-model-catalog.json.bak",
+              "session_index.jsonl.bak"]:
+    # 注意：文件名前可能有一个点，这里按实际存在的两种写法尝试
+    for cand in [extra, extra.lstrip('.')]:
+        p = os.path.join(ROOT, cand)
+        if os.path.exists(p):
+            rm(p); break
+
+# ---------- E. 旧插件备份 + 旧版本 command-runner ----------
+log.append("=== E. 旧插件备份 / 旧 runner ===")
+rm(os.path.join(ROOT, ".tmp", "plugins-backup-XTxxyY"))
+sb = os.path.join(ROOT, ".sandbox-bin")
+if os.path.isdir(sb):
+    runners = [f for f in os.listdir(sb) if f.startswith("codex-command-runner-")]
+    def ver(f):
+        import re
+        m = re.search(r"(\d+)\.(\d+)\.(\d+)", f)
+        return tuple(int(x) for x in m.groups()) if m else (0,0,0)
+    if runners:
+        newest = max(runners, key=ver)
+        for f in runners:
+            if f != newest:
+                rm(os.path.join(sb, f))
+        log.append(f"[保留] 最新 runner: {newest}")
+
+print("\n".join(log))
+print(f"\n===== 合计释放: {fmt(freed)} =====")

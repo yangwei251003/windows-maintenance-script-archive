@@ -1,0 +1,66 @@
+import os, datetime, collections
+def fmt(n):
+    for u in ['B','KB','MB','GB','TB']:
+        if n<1024: return f"{n:.1f} {u}"
+        n/=1024
+    return f"{n:.1f} TB"
+root=r"<LOCAL_USER_HOME>\.codex"
+
+print("===== sessions 目录层级结构 =====")
+s=os.path.join(root,"sessions")
+for r,d,fs in os.walk(s):
+    depth=r[len(s):].count(os.sep)
+    if depth<=1:
+        print("  "*depth + os.path.basename(r) or r, f"[{len(d)} dirs, {len(fs)} files]")
+
+print("\n===== sessions 按修改日期聚合 =====")
+buckets=collections.Counter(); sizes=collections.Counter()
+for r,d,fs in os.walk(s):
+    for f in fs:
+        fp=os.path.join(r,f)
+        try:
+            st=os.stat(fp); dt=datetime.datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d")
+            buckets[dt]+=1; sizes[dt]+=st.st_size
+        except: pass
+tot=sum(sizes.values())
+old=0; oldsz=0
+for dt in sorted(buckets):
+    mark=""
+    if dt < "2026-08-02": mark=" <-- 2个月前"; old+=buckets[dt]; oldsz+=sizes[dt]
+    print(f"  {dt}   {fmt(sizes[dt]):>9}  {buckets[dt]:>3} files{mark}")
+print(f"  >>> sessions 合计 {fmt(tot)}；2026-08-02 之前: {fmt(oldsz)} / {old} files")
+
+print("\n===== archived_sessions 文件日期 =====")
+a=os.path.join(root,"archived_sessions")
+b2=collections.Counter(); s2=collections.Counter()
+for r,d,fs in os.walk(a):
+    for f in fs:
+        fp=os.path.join(r,f)
+        try:
+            st=os.stat(fp); dt=datetime.datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d")
+            b2[dt]+=1; s2[dt]+=st.st_size
+        except: pass
+for dt in sorted(b2):
+    print(f"  {dt}   {fmt(s2[dt]):>9}  {b2[dt]} files")
+print(f"  archived 合计 {fmt(sum(s2.values()))}")
+
+for name in [".chatgpt-projects","video-link-tools","cache","browser-profiles",".sandbox-bin"]:
+    p=os.path.join(root,name)
+    print(f"\n===== {name} 一级 =====")
+    if not os.path.isdir(p): print("  [不存在]"); continue
+    es=[]
+    for n2 in os.listdir(p):
+        p2=os.path.join(p,n2)
+        if os.path.isdir(p2):
+            sz=0;cnt=0
+            for r,d,fs in os.walk(p2):
+                for f in fs:
+                    try: sz+=os.path.getsize(os.path.join(r,f));cnt+=1
+                    except: pass
+            es.append((sz,n2,cnt))
+        else:
+            try: es.append((os.path.getsize(p2),n2,1))
+            except: es.append((0,n2,1))
+    es.sort(reverse=True)
+    for sz,n2,cnt in es[:12]:
+        print(f"   {fmt(sz):>9}  ({cnt})  {n2}")
